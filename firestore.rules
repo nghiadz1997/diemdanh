@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        request.auth.token.role == 'super_admin' ||
+        request.auth.token.email == 'admin@nsg.edu.vn' ||
+        request.auth.token.email == 'admin@diemdanh.edu.vn' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         getUserData().role == 'super_admin')
+      );
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        request.auth.token.role == 'admin' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (getUserData().role == 'admin' || getUserData().role == 'super_admin'))
+      );
+    }
+
+    function isTeacher() {
+      return isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.role == 'teacher' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         getUserData().role == 'teacher')
+      );
+    }
+
+    function isStudent() {
+      return isSignedIn() && (
+        request.auth.token.role == 'student' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         getUserData().role == 'student')
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin() || isSignedIn();
+    }
+
+    // CLASSES COLLECTION
+    match /classes/{classId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // CLASS MEMBERS COLLECTION
+    match /classMembers/{memberId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // SUBJECTS COLLECTION
+    match /subjects/{subjectId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // SESSIONS (BUỔI HỌC)
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // ATTENDANCE (ĐIỂM DANH - CỔNG CÔNG KHAI VÀ SINH VIÊN)
+    match /attendance/{attendanceId} {
+      allow read, write: if true;
+    }
+
+    // POSTS (DIỄN ĐÀN LỚP HỌC)
+    match /posts/{postId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // COMMENTS
+    match /comments/{commentId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // ASSIGNMENTS (BÀI TẬP)
+    match /assignments/{assignmentId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // SUBMISSIONS (BÀI NỘP)
+    match /submissions/{submissionId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // NOTIFICATIONS
+    match /notifications/{notificationId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // AUDIT LOGS
+    match /auditLogs/{logId} {
+      allow read, write: if true;
+    }
+
+    // ANNOUNCEMENTS (THÔNG BÁO TOÀN TRƯỜNG)
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

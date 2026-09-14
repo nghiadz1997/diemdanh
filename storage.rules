@@ -1,0 +1,50 @@
+﻿rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isUnder10MB() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+
+    function isAllowedMimeType() {
+      return request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('application/msword') ||
+             request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document') ||
+             request.resource.contentType.matches('image/jpeg') ||
+             request.resource.contentType.matches('image/png') ||
+             request.resource.contentType.matches('image/webp');
+    }
+
+    // Avatar uploads
+    match /avatars/{uid}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid) && request.resource.size < 3 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+    }
+
+    // Class forum post attachments
+    match /classes/{classId}/posts/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isUnder10MB() && isAllowedMimeType();
+    }
+
+    // Class assignment teacher files
+    match /classes/{classId}/assignments/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isUnder10MB() && isAllowedMimeType();
+    }
+
+    // Student assignment submissions
+    match /classes/{classId}/submissions/{uid}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid) && isUnder10MB() && isAllowedMimeType();
+    }
+  }
+}
