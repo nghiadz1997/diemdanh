@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { Database, Shield, Send, CheckCircle2, AlertCircle, Loader2, Key, MessageSquare } from 'lucide-react';
@@ -110,10 +110,10 @@ export default function AdminSettingsPage() {
           <div>
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-sky-500" />
-              <span>Tích Hợp Log Đơn Nghỉ Phép Qua Telegram Bot</span>
+              <span>Tích Hợp Log Điểm Danh & Đơn Nghỉ Phép Qua Telegram Bot</span>
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Tự động gửi thông báo chi tiết mỗi khi có sinh viên gửi đơn xin nghỉ phép
+              Tự động gửi thông báo chi tiết mỗi khi có sinh viên điểm danh hoặc gửi đơn xin nghỉ phép
             </p>
           </div>
           <div>

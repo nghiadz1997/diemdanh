@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { sendAttendanceTelegramNotification } from '@/services/telegramService';
 
 export default function StudentAttendancePage() {
   const { profile, user } = useAuth();
@@ -338,6 +339,21 @@ export default function StudentAttendancePage() {
         method: 'code',
       } as any,
     }));
+
+    // Tự động gửi thông báo điểm danh về Bot Telegram
+    sendAttendanceTelegramNotification({
+      studentName,
+      studentCode: cleanStudentCode,
+      className,
+      classCode,
+      sessionTitle: session.title || 'Buổi học',
+      checkInTime: nowTimeStr,
+      phone: profile?.phone || undefined,
+      gender: profile?.gender || undefined,
+      cccd: profile?.cccd || undefined,
+      status: 'present',
+      method: 'code',
+    });
 
     return {
       className,

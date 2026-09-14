@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
@@ -39,9 +39,42 @@ export async function POST(req: NextRequest) {
         '🤖 <b>KIỂM TRA KẾT NỐI BOT TELEGRAM</b>',
         '━━━━━━━━━━━━━━━━━━━━',
         '🏫 <b>TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN</b>',
-        '✅ <i>Kết nối thành công!</i> Hệ thống quản lý & điểm danh đã sẵn sàng tự động ghi log đơn xin nghỉ phép vào Telegram.',
+        '✅ <i>Kết nối thành công!</i> Hệ thống quản lý & điểm danh đã sẵn sàng tự động ghi log vào Telegram.',
         `⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}`,
       ].join('\n');
+    } else if (body.type === 'attendance') {
+      const nowStr = body.checkInTime || new Date().toLocaleString('vi-VN');
+      const studentName = body.studentName || 'Chưa rõ';
+      const studentCode = body.studentCode || 'N/A';
+      const className = body.className || 'Lớp học';
+      const classCode = body.classCode ? ` (${body.classCode})` : '';
+      const sessionTitle = body.sessionTitle || 'Buổi học';
+      const methodText =
+        body.method === 'portal'
+          ? '🌐 Cổng điểm danh nhanh'
+          : body.method === 'code'
+          ? '🔢 Nhập mã 6 số buổi học'
+          : '📱 Điểm danh trực tuyến';
+      const statusText = body.status === 'present' || !body.status ? 'CÓ MẶT (CÓ ĐI HỌC)' : body.status;
+
+      messageText = [
+        '✅ <b>SINH VIÊN ĐIỂM DANH THÀNH CÔNG</b>',
+        '━━━━━━━━━━━━━━━━━━━━',
+        '🏫 <b>TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN</b>',
+        `👤 <b>Sinh viên:</b> <b>${studentName}</b>`,
+        `🆔 <b>Mã SV (MSSV):</b> <code>${studentCode}</code>`,
+        `📚 <b>Lớp học:</b> ${className}${classCode}`,
+        `📖 <b>Buổi học:</b> ${sessionTitle}`,
+        body.phone ? `📞 <b>Số điện thoại:</b> ${body.phone}` : null,
+        body.gender ? `⚧ <b>Giới tính:</b> ${body.gender}` : null,
+        body.cccd ? `🪪 <b>CCCD/Căn cước:</b> <code>${body.cccd}</code>` : null,
+        `⏰ <b>Thời gian:</b> ${nowStr}`,
+        `📱 <b>Hình thức:</b> ${methodText}`,
+        '━━━━━━━━━━━━━━━━━━━━',
+        `Trạng thái: 🟢 <b>${statusText}</b>`,
+      ]
+        .filter(Boolean)
+        .join('\n');
     } else {
       const fromDate = body.fromDate || 'N/A';
       const toDate = body.toDate || 'N/A';
