@@ -235,7 +235,7 @@ export default function RegisterPage() {
             TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN
           </span>
           <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 mt-1">
-            ĐĂNG KÝ TÀI KHOẢN SINH VIÊN
+            NHẬP THÔNG TIN SINH VIÊN
           </h1>
           <p className="mt-1 text-xs text-slate-500 font-medium">
             Điền thông tin để đăng ký hồ sơ sinh viên vào hệ thống quản lý & điểm danh
