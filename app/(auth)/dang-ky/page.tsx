@@ -525,15 +525,25 @@ export default function RegisterPage() {
             </div>
           </form>
 
-          {/* Quay lại Đăng nhập */}
-          <div className="text-center mt-6 pt-4 border-t border-slate-100">
-            <span className="text-xs text-slate-500">Đã có tài khoản? </span>
-            <Link
-              href="/dang-nhap"
-              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
-            >
-              Đăng nhập ngay
-            </Link>
+          {/* Quay lại Đăng nhập & Về cổng điểm danh */}
+          <div className="text-center mt-6 pt-4 border-t border-slate-100 flex flex-col items-center gap-2.5">
+            <div>
+              <span className="text-xs text-slate-500">Đã có tài khoản? </span>
+              <Link
+                href="/dang-nhap"
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
+              >
+                Đăng nhập ngay
+              </Link>
+            </div>
+            <div>
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors"
+              >
+                <span>← Trở về Cổng điểm danh nhanh</span>
+              </Link>
+            </div>
           </div>
         </div>
 

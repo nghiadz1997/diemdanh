@@ -451,14 +451,24 @@ export default function LoginPage() {
             <span>Đăng nhập bằng Google</span>
           </button>
 
-          <div className="text-center mt-5 pt-4 border-t border-slate-100">
-            <span className="text-xs text-slate-500">Chưa có tài khoản sinh viên? </span>
-            <Link
-              href="/dang-ky"
-              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
-            >
-              Đăng ký ngay
-            </Link>
+          <div className="text-center mt-5 pt-4 border-t border-slate-100 flex flex-col items-center gap-2.5">
+            <div>
+              <span className="text-xs text-slate-500">Chưa có tài khoản sinh viên? </span>
+              <Link
+                href="/dang-ky"
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
+              >
+                Đăng ký ngay
+              </Link>
+            </div>
+            <div>
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors"
+              >
+                <span>← Trở về Cổng điểm danh nhanh</span>
+              </Link>
+            </div>
           </div>
         </div>
 
