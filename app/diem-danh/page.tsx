@@ -406,22 +406,18 @@ export default function PublicAttendancePortalPage() {
               <div className="w-24 h-24 mx-auto rounded-3xl bg-white p-2 shadow-lg shadow-indigo-500/10 ring-4 ring-indigo-50 flex items-center justify-center">
                 <img
                   src="/logo.png"
-                  alt="Logo Trường Cao Đẳng Nghề NSG"
+                  alt="Logo TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN"
                   className="w-full h-full object-contain"
                 />
               </div>
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 block">
-                  Trường Cao Đẳng Nghề NSG
+                  TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN
                 </span>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 mt-0.5">
                   Hệ Thống Điểm Danh Sinh Viên
                 </h1>
               </div>
-              <p className="text-xs text-slate-500 max-w-xs mx-auto pt-1">
-                Nhập <span className="font-bold text-slate-700">Mã sinh viên</span> và{' '}
-                <span className="font-bold text-slate-700">Mã điểm danh (6 số)</span> do giảng viên trình chiếu trên lớp
-              </p>
             </div>
 
             <form onSubmit={handleCheckIn} className="space-y-4">
@@ -435,7 +431,7 @@ export default function PublicAttendancePortalPage() {
                     type="text"
                     value={studentCode}
                     onChange={(e) => setStudentCode(e.target.value.toUpperCase())}
-                    placeholder="Ví dụ: SV24001, 24TH01 hoặc SV01"
+                    placeholder="Nhập mã sinh viên (MSSV)"
                     className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-mono font-bold text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all uppercase placeholder:normal-case placeholder:font-normal placeholder:text-slate-400"
                     required
                     autoFocus
@@ -445,23 +441,13 @@ export default function PublicAttendancePortalPage() {
                   </div>
                 </div>
 
-                {/* Tham chiếu tên sinh viên realtime */}
-                {referencedName ? (
+                {referencedName && (
                   <div className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold animate-in fade-in">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
                     <span>
                       Họ và tên: <strong className="text-emerald-950 font-bold">{referencedName}</strong>
                     </span>
                   </div>
-                ) : studentCode.trim().length >= 2 ? (
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Ghi nhận điểm danh có mặt cho mã sinh viên{' '}
-                    <strong className="font-mono text-slate-600">{studentCode.trim().toUpperCase()}</strong>
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Nhập mã số sinh viên của bạn để hệ thống nhận diện
-                  </p>
                 )}
               </div>
 
@@ -485,9 +471,6 @@ export default function PublicAttendancePortalPage() {
                     <QrCode className="w-5 h-5 text-indigo-400" />
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1.5 text-center">
-                  Nhập mã 6 chữ số ngẫu nhiên do giảng viên hiển thị trên bảng lớp
-                </p>
               </div>
 
               {/* Nút Điểm Danh */}
@@ -511,13 +494,6 @@ export default function PublicAttendancePortalPage() {
                 </button>
               </div>
             </form>
-
-            <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-center text-xs text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-amber-500" />
-                <span>Không điểm danh đúng giờ = Vắng mặt</span>
-              </span>
-            </div>
           </div>
         ) : (
           /* Success Screen Card */

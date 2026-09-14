@@ -1,4 +1,4 @@
-﻿# dependencies
+# dependencies
 /node_modules
 /.pnp
 .pnp.js
@@ -41,6 +41,7 @@ next-env.d.ts
 *firebase-adminsdk*.json
 credentials.json
 serviceAccountKey.json
+config/telegram.json
 
 # IDE
 .idea/

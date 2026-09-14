@@ -11,6 +11,7 @@ import {
   Users,
   UserPlus,
   Upload,
+  Download,
   Search,
   CheckCircle,
   XCircle,
@@ -19,6 +20,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
@@ -270,6 +272,59 @@ export default function StudentManagementPage() {
     return firstClass ? firstClass.className : classIds[0];
   };
 
+  const handleExportExcel = () => {
+    if (filteredStudents.length === 0) {
+      toast.info('Không có dữ liệu sinh viên nào để xuất Excel');
+      return;
+    }
+
+    try {
+      const exportData = filteredStudents.map((s, index) => ({
+        'STT': index + 1,
+        'Mã sinh viên': s.studentCode || '',
+        'Họ và tên': s.fullName || '',
+        'Lớp học': getClassNameById(s.classIds),
+        'Email': s.email || '',
+        'Giới tính': s.gender || 'Nam',
+        'Ngày sinh': s.dateOfBirth || '',
+        'Số điện thoại': s.phone || '',
+        'Số CCCD': s.cccd || '',
+        'Nơi sinh': s.placeOfBirth || '',
+        'Quê quán': s.hometown || '',
+        'Hộ khẩu thường trú': s.permanentAddress || '',
+        'Trạng thái': s.active !== false ? 'Đang hoạt động' : 'Đã vô hiệu hoá',
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      // Căn chỉnh độ rộng cột
+      ws['!cols'] = [
+        { wch: 6 },  // STT
+        { wch: 15 }, // Mã SV
+        { wch: 25 }, // Họ tên
+        { wch: 25 }, // Lớp học
+        { wch: 25 }, // Email
+        { wch: 10 }, // Giới tính
+        { wch: 12 }, // Ngày sinh
+        { wch: 14 }, // SĐT
+        { wch: 16 }, // CCCD
+        { wch: 18 }, // Nơi sinh
+        { wch: 20 }, // Quê quán
+        { wch: 35 }, // Hộ khẩu thường trú
+        { wch: 16 }, // Trạng thái
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'DanhSachSinhVien');
+      const filename = `Danh_sach_sinh_vien_NSG_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, filename);
+
+      toast.success(`Đã xuất ${exportData.length} sinh viên ra file Excel thành công!`);
+    } catch (err: any) {
+      console.error('Lỗi xuất Excel sinh viên:', err);
+      toast.error('Không thể xuất file Excel: ' + (err.message || 'Lỗi không xác định'));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -282,6 +337,14 @@ export default function StudentManagementPage() {
           </p>
         </div>
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleExportExcel}
+            className="py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-2xl border border-emerald-200 shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+            title="Xuất danh sách sinh viên hiện tại ra file Excel"
+          >
+            <Download className="w-4 h-4 text-emerald-600" />
+            <span>Xuất Excel</span>
+          </button>
           <button
             onClick={() => setIsImportModalOpen(true)}
             className="py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 cursor-pointer transition-all"

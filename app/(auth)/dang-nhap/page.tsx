@@ -323,29 +323,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Banner Cổng Điểm Danh Nhanh */}
-        <div className="mb-4">
-          <Link
-            href="/diem-danh"
-            className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-700 hover:to-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-emerald-500/20 flex items-center justify-between transition-all group active:scale-[0.99]"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <CalendarCheck className="w-5 h-5 text-white" />
-              </div>
-              <div className="text-left">
-                <span className="text-xs font-black uppercase tracking-wider block">
-                  ⚡ Cổng Điểm Danh Nhanh Cho Sinh Viên
-                </span>
-                <span className="text-[11px] text-white/90 font-normal">
-                  Chỉ cần Mã SV & Mã lớp (Không cần đăng nhập)
-                </span>
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-white group-hover:translate-x-1 transition-transform shrink-0" />
-          </Link>
-        </div>
-
         {/* Card Form */}
         <div className="bg-white rounded-3xl p-8 shadow-xl shadow-slate-200/60 border border-slate-100">
           <form onSubmit={handleLogin} className="space-y-5">
@@ -361,7 +338,7 @@ export default function LoginPage() {
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Nhập email (sv@nsg.edu.vn) hoặc Mã SV (SV2026001)"
+                  placeholder="Nhập Mã sinh viên, Mã GV hoặc Email"
                   className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all font-medium"
                   required
                 />
@@ -388,7 +365,7 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Nhập mật khẩu của bạn"
+                  placeholder="Nhập mật khẩu"
                   className="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
                   required
                 />
@@ -473,6 +450,16 @@ export default function LoginPage() {
             )}
             <span>Đăng nhập bằng Google</span>
           </button>
+
+          <div className="text-center mt-5 pt-4 border-t border-slate-100">
+            <span className="text-xs text-slate-500">Chưa có tài khoản sinh viên? </span>
+            <Link
+              href="/dang-ky"
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
+            >
+              Đăng ký ngay
+            </Link>
+          </div>
         </div>
 
         {/* Footer Note */}
