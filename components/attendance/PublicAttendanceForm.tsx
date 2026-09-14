@@ -317,18 +317,18 @@ export function PublicAttendanceForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-slate-100 flex flex-col justify-between p-3 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex flex-col justify-between p-4 sm:p-6">
       {/* Top Navbar Header */}
       <header className="w-full max-w-4xl mx-auto flex items-center justify-between py-2 px-1 mb-2">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-white p-1 shadow-md flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-white p-1.5 shadow-md border border-slate-100 flex items-center justify-center shrink-0">
             <img src="/logo.png" alt="Logo CĐ Bách Khoa Nam Sài Gòn" className="w-full h-full object-contain" />
           </div>
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 block">
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-indigo-700 block">
               TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN
             </span>
-            <span className="text-xs font-black text-white block">
+            <span className="text-xs sm:text-sm font-black text-slate-900 block">
               HỆ THỐNG ĐIỂM DANH SINH VIÊN
             </span>
           </div>
@@ -344,7 +344,7 @@ export function PublicAttendanceForm() {
                   ? '/giang-vien/dashboard'
                   : '/sinh-vien/dashboard'
               }
-              className="py-2 px-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95"
+              className="py-2 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95"
             >
               <span>Vào Bảng điều khiển</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -353,13 +353,13 @@ export function PublicAttendanceForm() {
             <div className="flex items-center gap-2">
               <Link
                 href="/dang-ky"
-                className="py-2 px-3 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold rounded-xl text-xs transition-all active:scale-95"
+                className="py-2 px-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-all shadow-sm active:scale-95"
               >
                 Đăng ký sinh viên
               </Link>
               <Link
                 href="/dang-nhap"
-                className="py-2 px-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1 transition-all shadow-md active:scale-95"
+                className="py-2 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 transition-all shadow-md active:scale-95"
               >
                 <span>Đăng nhập</span>
                 <LogIn className="w-3.5 h-3.5" />
@@ -373,10 +373,10 @@ export function PublicAttendanceForm() {
       <main className="max-w-md w-full mx-auto my-auto py-4">
         {!result ? (
           /* Check-In Form Card */
-          <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-800 border border-white/20 animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/50 text-slate-800 border border-slate-100">
             {/* Header Branding with Logo */}
             <div className="text-center space-y-2 mb-6">
-              <div className="w-20 h-20 mx-auto rounded-3xl bg-white p-2 shadow-lg shadow-indigo-500/10 ring-4 ring-indigo-50 flex items-center justify-center">
+              <div className="w-20 h-20 mx-auto rounded-3xl bg-white p-2 shadow-lg shadow-indigo-100 border border-slate-100 flex items-center justify-center">
                 <img
                   src="/logo.png"
                   alt="Logo TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN"
@@ -470,7 +470,7 @@ export function PublicAttendanceForm() {
           </div>
         ) : (
           /* Success Screen Card */
-          <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-800 border border-white/20 text-center space-y-6 animate-in zoom-in-95">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/50 text-slate-800 border border-slate-100 text-center space-y-6">
             <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center ring-8 ring-emerald-50/50 shadow-lg shadow-emerald-500/20">
               <CheckCircle2 className="w-12 h-12" />
             </div>
