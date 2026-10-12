@@ -167,11 +167,29 @@ export default function TeacherAttendanceDashboardPage() {
     }
   };
 
-  const handleDeleteRecord = async (recordId: string, studentCode: string) => {
-    if (!confirm(`Bạn có chắc muốn xóa bản ghi điểm danh của sinh viên ${studentCode}?`)) return;
+  const handleDeleteRecord = async (recordId?: string, studentCode?: string, memberDocId?: string) => {
+    if (!confirm(`Bạn có chắc muốn xóa bản ghi (${studentCode || ''}) khỏi bảng điểm danh?`)) return;
     try {
-      await deleteDoc(doc(db, 'attendance', recordId));
-      toast.success(`Đã xóa điểm danh của SV ${studentCode}`);
+      if (recordId) {
+        await deleteDoc(doc(db, 'attendance', recordId));
+        setAttendanceRecords((prev) => prev.filter((a) => a.id !== recordId));
+      }
+      if (studentCode) {
+        try {
+          await deleteDoc(doc(db, 'attendance', `${sessionId}_${studentCode}`));
+          setAttendanceRecords((prev) => prev.filter((a) => a.studentCode !== studentCode));
+        } catch {}
+        try {
+          await deleteDoc(doc(db, 'classMembers', `${classId}_${studentCode}`));
+        } catch {}
+      }
+      if (memberDocId) {
+        try {
+          await deleteDoc(doc(db, 'classMembers', memberDocId));
+          setMembers((prev) => prev.filter((m) => m.id !== memberDocId));
+        } catch {}
+      }
+      toast.success(`Đã xóa bản ghi ${studentCode || ''}`);
     } catch (err) {
       toast.error('Lỗi khi xóa điểm danh');
     }
@@ -325,11 +343,12 @@ export default function TeacherAttendanceDashboardPage() {
               <tbody className="divide-y divide-slate-100">
                 {filteredRows.map((r, index) => {
                   const badge = getAttendanceStatusBadge(r.status);
-                  const studentName = r.member.user?.fullName || 'Sinh viên';
-                  const studentCode = r.member.studentCode || r.member.user?.studentCode || '--';
-                  const studentGender = r.member.user?.gender || 'Nam';
-                  const studentBirth = r.member.user?.dateOfBirth || '--';
-                  const studentPhone = r.member.user?.phone || '--';
+                  const studentName = r.member.fullName || r.member.user?.fullName || r.record?.studentName || 'Sinh viên';
+                  const studentCode = r.member.studentCode || r.member.user?.studentCode || r.record?.studentCode || '--';
+                  const isInvalidStudent = studentName.startsWith('Sinh viên ') || studentCode.length > 15 || studentName === 'Sinh viên';
+                  const studentGender = r.member.gender || r.member.user?.gender || (r.record as any)?.gender || 'Nam';
+                  const studentBirth = r.member.dateOfBirth || r.member.user?.dateOfBirth || (r.record as any)?.dateOfBirth || '--';
+                  const studentPhone = r.member.phone || r.member.user?.phone || (r.record as any)?.phone || '--';
 
                   return (
                     <tr key={r.member.id} className="hover:bg-slate-50/60 transition-colors">
@@ -340,7 +359,14 @@ export default function TeacherAttendanceDashboardPage() {
                         {studentCode}
                       </td>
                       <td className="px-4 py-3.5 font-semibold text-slate-800">
-                        {studentName}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{studentName}</span>
+                          {isInvalidStudent && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              Mã chưa xác định
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3.5">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -422,12 +448,12 @@ export default function TeacherAttendanceDashboardPage() {
                           >
                             Vắng
                           </button>
-                          {r.record && (
+                          {(r.record || isInvalidStudent) && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteRecord(r.record!.id, studentCode)}
+                              onClick={() => handleDeleteRecord(r.record?.id, studentCode, r.member.id)}
                               className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                              title="Xóa lượt điểm danh này"
+                              title="Xóa lượt điểm danh / bản ghi này"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

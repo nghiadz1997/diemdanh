@@ -149,13 +149,25 @@ export async function removeStudentFromClass(
 ): Promise<void> {
   const memberId = `${classId}_${userId}`;
   const memberRef = doc(db, 'classMembers', memberId);
-  await deleteDoc(memberRef);
+  try {
+    await deleteDoc(memberRef);
+  } catch {}
+  try {
+    await deleteDoc(doc(db, 'classMembers', userId));
+  } catch {}
+  if (userId.startsWith('sv_')) {
+    try {
+      await deleteDoc(doc(db, 'classMembers', `${classId}_${userId.replace('sv_', '')}`));
+    } catch {}
+  }
 
   const classRef = doc(db, 'classes', classId);
-  await updateDoc(classRef, {
-    studentCount: increment(-1),
-    updatedAt: serverTimestamp(),
-  });
+  try {
+    await updateDoc(classRef, {
+      studentCount: increment(-1),
+      updatedAt: serverTimestamp(),
+    });
+  } catch {}
 
   const userRef = doc(db, 'users', userId);
   const userSnap = await getDoc(userRef);

@@ -7,6 +7,7 @@ import { LessonSession } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import {
   CheckCircle2,
+  AlertCircle,
   Loader2,
   RotateCcw,
   Sparkles,
@@ -62,23 +63,32 @@ export function PublicAttendanceForm() {
 
     const timer = setTimeout(async () => {
       try {
-        // 1. Tìm trong classMembers
-        const snapM = await getDocs(
-          query(collection(db, 'classMembers'), where('studentCode', '==', clean))
-        );
-        if (!snapM.empty) {
-          setReferencedName(snapM.docs[0].data().fullName);
-          return;
-        }
-
-        // 2. Tìm trong users
+        // 1. Tìm trong users (nguồn tài khoản sinh viên chính thức của trường)
         const snapU = await getDocs(
           query(collection(db, 'users'), where('studentCode', '==', clean))
         );
         if (!snapU.empty) {
           const uData = snapU.docs[0].data();
-          setReferencedName(uData.fullName || uData.displayName);
-          return;
+          const name = (uData.fullName || uData.displayName || '').trim();
+          if (name && !name.startsWith('Sinh viên ')) {
+            setReferencedName(name);
+            return;
+          }
+        }
+
+        // 2. Tìm trong classMembers chính thức (chỉ nhận hồ sơ có tên người thật)
+        const snapM = await getDocs(
+          query(collection(db, 'classMembers'), where('studentCode', '==', clean))
+        );
+        if (!snapM.empty) {
+          for (const d of snapM.docs) {
+            const mData = d.data();
+            const name = (mData.fullName || '').trim();
+            if (name && !name.startsWith('Sinh viên ') && mData.userId && !mData.userId.startsWith('sv_')) {
+              setReferencedName(name);
+              return;
+            }
+          }
         }
 
         setReferencedName(null);
@@ -98,6 +108,12 @@ export function PublicAttendanceForm() {
 
     if (!cleanStudentCode) {
       toast.error('Vui lòng nhập Mã số sinh viên (MSSV)');
+      return;
+    }
+
+    // Kiểm tra độ dài bất thường do gõ lặp / dán đúp mã (như trong trường hợp dán 2 lần)
+    if (cleanStudentCode.length > 15) {
+      toast.error(`Mã số sinh viên "${cleanStudentCode}" không hợp lệ (độ dài quá 15 ký tự do dán lặp mã). Vui lòng kiểm tra lại!`);
       return;
     }
 
@@ -156,54 +172,73 @@ export function PublicAttendanceForm() {
         console.warn('Lỗi tìm thông tin lớp học:', classErr);
       }
 
-      // 3. TÌM THÔNG TIN SINH VIÊN
-      let finalFullName = referencedName || '';
+      // 3. XÁC THỰC MÃ SINH VIÊN BẮT BUỘC PHẢI THUỘC DANH SÁCH SINH VIÊN ĐÃ ĐƯỢC NHÀ TRƯỜNG CẤP
+      let finalFullName = '';
       let studentUid: string | null = null;
       let userProfileData: any = {};
 
+      // 3.1. Tìm trong collection users (nguồn chính thức của trường)
       try {
-        const snapM = await getDocs(
-          query(collection(db, 'classMembers'), where('studentCode', '==', cleanStudentCode))
-        );
-        if (!snapM.empty) {
-          const mData = snapM.docs[0].data();
-          finalFullName = mData.fullName || finalFullName;
-          studentUid = mData.userId || null;
-          userProfileData = { ...mData };
+        const [snapUUpper, snapULower] = await Promise.all([
+          getDocs(query(collection(db, 'users'), where('studentCode', '==', cleanStudentCode))),
+          cleanStudentCode !== cleanStudentCode.toLowerCase()
+            ? getDocs(query(collection(db, 'users'), where('studentCode', '==', cleanStudentCode.toLowerCase())))
+            : Promise.resolve({ empty: true, docs: [] } as any),
+        ]);
+
+        const foundUserDoc = !snapUUpper.empty ? snapUUpper.docs[0] : (!snapULower.empty ? snapULower.docs[0] : null);
+
+        if (foundUserDoc) {
+          const uData = foundUserDoc.data();
+          studentUid = foundUserDoc.id;
+          finalFullName = (uData.fullName || uData.displayName || '').trim();
+          userProfileData = { ...uData };
         }
-      } catch (mErr) {
-        console.warn('Lỗi tìm classMembers:', mErr);
+      } catch (uErr) {
+        console.warn('Lỗi tìm users:', uErr);
       }
 
-      if (!studentUid) {
+      // 3.2. Nếu chưa có trong users, tìm trong classMembers chính thức (chỉ nhận hồ sơ hợp lệ có tên người thật)
+      if (!studentUid || !finalFullName) {
         try {
-          const snapU = await getDocs(
-            query(collection(db, 'users'), where('studentCode', '==', cleanStudentCode))
+          const snapM = await getDocs(
+            query(collection(db, 'classMembers'), where('studentCode', '==', cleanStudentCode))
           );
-          if (!snapU.empty) {
-            const uData = snapU.docs[0].data();
-            studentUid = snapU.docs[0].id;
-            finalFullName = uData.fullName || uData.displayName || finalFullName;
-            userProfileData = { ...userProfileData, ...uData };
+          if (!snapM.empty) {
+            for (const mDoc of snapM.docs) {
+              const mData = mDoc.data();
+              const fName = (mData.fullName || '').trim();
+              if (fName && !fName.startsWith('Sinh viên ') && mData.userId && !mData.userId.startsWith('sv_')) {
+                studentUid = mData.userId;
+                finalFullName = fName;
+                userProfileData = { ...mData };
+                break;
+              }
+            }
           }
-        } catch (uErr) {
-          console.warn('Lỗi tìm users:', uErr);
+        } catch (mErr) {
+          console.warn('Lỗi tìm classMembers:', mErr);
         }
       }
 
-      if (!finalFullName) {
-        finalFullName = `Sinh viên ${cleanStudentCode}`;
+      // RÀNG BUỘC NGHIÊM NGẶT: NẾU MSSV KHÔNG TỒN TẠI HOẶC CHƯA ĐƯỢC CẤP -> TỪ CHỐI ĐIỂM DANH!
+      if (!studentUid || !finalFullName || finalFullName.startsWith('Sinh viên ')) {
+        toast.error(
+          `Mã số sinh viên "${cleanStudentCode}" không tồn tại trong danh sách sinh viên được nhà trường cấp. Vui lòng kiểm tra lại chính xác MSSV của bạn hoặc liên hệ Giảng viên/Phòng Đào tạo!`
+        );
+        setSubmitting(false);
+        return;
       }
 
-      // Tự động thêm/cập nhật sinh viên vào danh sách thành viên lớp classMembers để giảng viên thấy
+      // Tự động liên kết sinh viên chính thức vào thành viên lớp nếu chưa có
       try {
-        const memberKey = `${classId}_${cleanStudentCode}`;
+        const memberKey = `${classId}_${studentUid}`;
         const memRef = doc(db, 'classMembers', memberKey);
         await setDoc(
           memRef,
           {
             classId: classId,
-            userId: studentUid || `sv_${cleanStudentCode}`,
+            userId: studentUid,
             studentCode: cleanStudentCode,
             fullName: finalFullName,
             gender: userProfileData.gender || '',
@@ -430,14 +465,19 @@ export function PublicAttendanceForm() {
                   </div>
                 </div>
 
-                {referencedName && (
+                {referencedName ? (
                   <div className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold animate-in fade-in">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
                     <span>
                       Họ và tên: <strong className="text-emerald-950 font-bold">{referencedName}</strong>
                     </span>
                   </div>
-                )}
+                ) : studentCode.trim().length >= 4 ? (
+                  <div className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-medium animate-in fade-in">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                    <span>Chưa tìm thấy sinh viên có mã này trong danh sách cấp của trường</span>
+                  </div>
+                ) : null}
               </div>
 
               {/* MÃ ĐIỂM DANH BUỔI HỌC (6 CHỮ SỐ) */}
