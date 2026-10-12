@@ -78,35 +78,33 @@ export default function StudentAttendancePage() {
       const studentUid = profile?.uid || user?.uid || '';
       const cleanStudentCode = profile?.studentCode?.trim().toUpperCase() || '';
 
-      // 1. Tải tất cả lớp học
-      const allClasses = await getClasses();
-
-      // 2. Lấy danh sách classId mà sinh viên tham gia
-      const enrolledClassIds = new Set<string>(profile?.classIds || []);
-
-      try {
-        const memQueries = [
-          query(collection(db, 'classMembers'), where('userId', '==', studentUid)),
-        ];
-        if (cleanStudentCode) {
-          memQueries.push(
-            query(collection(db, 'classMembers'), where('studentCode', '==', cleanStudentCode))
-          );
-        }
-        for (const q of memQueries) {
-          const snap = await getDocs(q);
-          snap.docs.forEach((d) => {
-            const data = d.data();
-            if (data.classId && data.active !== false) {
-              enrolledClassIds.add(data.classId);
-            }
-          });
-        }
-      } catch (errM) {
-        console.warn('Lỗi tìm classMembers của sinh viên:', errM);
+      // 1. Tải tất cả lớp học & kiểm tra classMembers song song
+      const memQueries = [
+        query(collection(db, 'classMembers'), where('userId', '==', studentUid)),
+      ];
+      if (cleanStudentCode) {
+        memQueries.push(
+          query(collection(db, 'classMembers'), where('studentCode', '==', cleanStudentCode))
+        );
       }
 
-      // Lọc danh sách lớp học của sinh viên (nếu chưa gán lớp nào thì fallback toàn bộ lớp hoạt động)
+      const [allClasses, memSnaps] = await Promise.all([
+        getClasses(),
+        Promise.all(memQueries.map((q) => getDocs(q).catch(() => null))),
+      ]);
+
+      const enrolledClassIds = new Set<string>(profile?.classIds || []);
+      for (const snap of memSnaps) {
+        if (!snap) continue;
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          if (data.classId && data.active !== false) {
+            enrolledClassIds.add(data.classId);
+          }
+        });
+      }
+
+      // Lọc danh sách lớp học của sinh viên
       const studentClasses =
         enrolledClassIds.size > 0
           ? allClasses.filter((c) => enrolledClassIds.has(c.id))
@@ -114,23 +112,33 @@ export default function StudentAttendancePage() {
 
       setClasses(studentClasses);
 
-      // 3. Tải các buổi học do giảng viên tạo cho các lớp này
+      // 2. Tải song song tất cả các buổi học và lịch sử điểm danh của sinh viên
       const targetClassIds = studentClasses.map((c) => c.id);
-      const loadedSessions: LessonSession[] = [];
-
-      for (const cid of targetClassIds) {
-        try {
-          const sessQ = query(collection(db, 'sessions'), where('classId', '==', cid));
-          const sessSnap = await getDocs(sessQ);
-          sessSnap.docs.forEach((d) => {
-            loadedSessions.push({ id: d.id, ...d.data() } as LessonSession);
-          });
-        } catch (sessErr) {
-          console.warn(`Lỗi tải sessions cho lớp ${cid}:`, sessErr);
-        }
+      const attQueries = [
+        query(collection(db, 'attendance'), where('userId', '==', studentUid)),
+      ];
+      if (cleanStudentCode) {
+        attQueries.push(
+          query(collection(db, 'attendance'), where('studentCode', '==', cleanStudentCode))
+        );
       }
 
-      // Sắp xếp: Buổi học đang mở điểm danh lên đầu tiên, sau đó theo ngày tạo mới nhất
+      const [sessionResults, attSnaps] = await Promise.all([
+        Promise.all(
+          targetClassIds.map(async (cid) => {
+            try {
+              const sessQ = query(collection(db, 'sessions'), where('classId', '==', cid));
+              const sessSnap = await getDocs(sessQ);
+              return sessSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LessonSession));
+            } catch {
+              return [];
+            }
+          })
+        ),
+        Promise.all(attQueries.map((aq) => getDocs(aq).catch(() => null))),
+      ]);
+
+      const loadedSessions = sessionResults.flat();
       loadedSessions.sort((a, b) => {
         if (a.attendanceOpen && !b.attendanceOpen) return -1;
         if (!a.attendanceOpen && b.attendanceOpen) return 1;
@@ -138,33 +146,18 @@ export default function StudentAttendancePage() {
         const timeB = (b.createdAt as any)?.toDate ? (b.createdAt as any).toDate().getTime() : 0;
         return timeB - timeA;
       });
-
       setSessions(loadedSessions);
 
-      // 4. Tải các lượt điểm danh của sinh viên này
       const attMap: Record<string, AttendanceRecord> = {};
-      try {
-        const attQueries = [
-          query(collection(db, 'attendance'), where('userId', '==', studentUid)),
-        ];
-        if (cleanStudentCode) {
-          attQueries.push(
-            query(collection(db, 'attendance'), where('studentCode', '==', cleanStudentCode))
-          );
-        }
-        for (const aq of attQueries) {
-          const attSnap = await getDocs(aq);
-          attSnap.docs.forEach((d) => {
-            const data = { id: d.id, ...d.data() } as AttendanceRecord;
-            if (data.sessionId) {
-              attMap[data.sessionId] = data;
-            }
-          });
-        }
-      } catch (attErr) {
-        console.warn('Lỗi tải attendance của sinh viên:', attErr);
+      for (const snap of attSnaps) {
+        if (!snap) continue;
+        snap.docs.forEach((d) => {
+          const data = { id: d.id, ...d.data() } as AttendanceRecord;
+          if (data.sessionId) {
+            attMap[data.sessionId] = data;
+          }
+        });
       }
-
       setAttendanceMap(attMap);
     } catch (err) {
       console.error('Lỗi khởi tạo dữ liệu điểm danh sinh viên:', err);

@@ -48,11 +48,11 @@ export default function TeacherSessionManagementPage() {
   const [duration, setDuration] = useState<number>(15);
   const [remainingTime, setRemainingTime] = useState<string>('');
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
-      const cData = await getClassById(classId);
-      if (cData) setClassData(cData);
+      const cData = classData || (await getClassById(classId));
+      if (cData && !classData) setClassData(cData);
       const effectiveId = cData?.id || classId;
       const cSessions = await getSessionsByClass(effectiveId);
       setSessions(cSessions || []);
@@ -62,12 +62,12 @@ export default function TeacherSessionManagementPage() {
       console.error('Lỗi nạp buổi học:', err);
       toast.error('Không thể tải thông tin lớp và buổi học');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (classId) fetchData();
+    if (classId) fetchData(true);
   }, [classId]);
 
   useEffect(() => {
@@ -114,7 +114,7 @@ export default function TeacherSessionManagementPage() {
       toast.success('Đã tạo buổi học mới');
       setTitle('');
       setIsModalOpen(false);
-      fetchData();
+      fetchData(false);
     } catch (err: any) {
       toast.error('Lỗi khi tạo buổi học');
     } finally {
@@ -126,13 +126,16 @@ export default function TeacherSessionManagementPage() {
     try {
       const { code, expiresAt } = await openAttendanceSession(session.id, duration);
       toast.success('Đã mở điểm danh! Mã: ' + code);
-      setActiveSession({
+      const updated: LessonSession = {
         ...session,
         attendanceCode: code,
         attendanceOpen: true,
         codeExpiresAt: expiresAt as any,
-      });
-      fetchData();
+      };
+      setActiveSession(updated);
+      setSessions((prev) =>
+        prev.map((s) => (s.id === session.id ? updated : s))
+      );
     } catch (err) {
       toast.error('Lỗi khi mở phiên điểm danh');
     }
@@ -145,7 +148,9 @@ export default function TeacherSessionManagementPage() {
       if (activeSession?.id === sessionId) {
         setActiveSession((prev) => (prev ? { ...prev, attendanceOpen: false } : null));
       }
-      fetchData();
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, attendanceOpen: false } : s))
+      );
     } catch (err) {
       toast.error('Lỗi khi đóng điểm danh');
     }

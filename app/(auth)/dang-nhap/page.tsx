@@ -33,32 +33,31 @@ export default function LoginPage() {
       let matchedDocId: string | null = null;
       const isCodeLogin = !inputClean.includes('@');
 
-      // Hỗ trợ đăng nhập bằng Mã sinh viên hoặc Mã giảng viên
+      // Hỗ trợ đăng nhập bằng Mã sinh viên hoặc Mã giảng viên (tìm kiếm song song siêu nhanh)
       if (isCodeLogin) {
         try {
-          // Thử tìm theo studentCode (chữ hoa, chữ thường, nguyên bản) hoặc teacherCode
-          const queries = [
-            query(collection(db, 'users'), where('studentCode', '==', inputClean.toUpperCase())),
-            query(collection(db, 'users'), where('studentCode', '==', inputClean.toLowerCase())),
-            query(collection(db, 'users'), where('studentCode', '==', inputClean)),
-            query(collection(db, 'users'), where('teacherCode', '==', inputClean.toUpperCase())),
-            query(collection(db, 'users'), where('teacherCode', '==', inputClean)),
-          ];
+          const codeUpper = inputClean.toUpperCase();
+          const [snapStudent, snapTeacher] = await Promise.all([
+            getDocs(query(collection(db, 'users'), where('studentCode', '==', codeUpper))),
+            getDocs(query(collection(db, 'users'), where('teacherCode', '==', codeUpper))),
+          ]);
 
-          for (const q of queries) {
-            try {
-              const snap = await getDocs(q);
-              if (!snap.empty) {
-                matchedUserData = snap.docs[0].data();
-                matchedDocId = snap.docs[0].id;
-                if (matchedUserData.email) {
-                  targetEmail = matchedUserData.email.trim().toLowerCase();
-                  break;
-                }
-              }
-            } catch (queryErr) {
-              console.warn('Lỗi Firestore query studentCode:', queryErr);
-              break;
+          let foundDoc = !snapStudent.empty ? snapStudent.docs[0] : (!snapTeacher.empty ? snapTeacher.docs[0] : null);
+
+          // Nếu chưa thấy và chuỗi nhập không phải chữ in hoa, kiểm tra thêm case nguyên bản
+          if (!foundDoc && inputClean !== codeUpper) {
+            const [snapOrig, snapLower] = await Promise.all([
+              getDocs(query(collection(db, 'users'), where('studentCode', '==', inputClean))),
+              getDocs(query(collection(db, 'users'), where('studentCode', '==', inputClean.toLowerCase()))),
+            ]);
+            foundDoc = !snapOrig.empty ? snapOrig.docs[0] : (!snapLower.empty ? snapLower.docs[0] : null);
+          }
+
+          if (foundDoc) {
+            matchedUserData = foundDoc.data();
+            matchedDocId = foundDoc.id;
+            if (matchedUserData.email) {
+              targetEmail = matchedUserData.email.trim().toLowerCase();
             }
           }
         } catch (e) {

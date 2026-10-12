@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { UserProfile } from '@/types';
+import { compareVietnameseNames } from '@/lib/utils';
 
 export async function getStudents(filter?: {
   classId?: string;
@@ -31,10 +32,11 @@ export async function getStudents(filter?: {
       students = students.filter((s) => s.classIds && s.classIds.includes(filter.classId!));
     }
 
+    // Sắp xếp thứ tự danh sách theo bảng chữ cái A, B, C (theo Tên chính, sau đó Họ và Tên đệm)
     students.sort((a, b) => {
-      const tA = (a.createdAt as any)?.toMillis ? (a.createdAt as any).toMillis() : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
-      const tB = (b.createdAt as any)?.toMillis ? (b.createdAt as any).toMillis() : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
-      return tB - tA;
+      const cmp = compareVietnameseNames(a.fullName, b.fullName);
+      if (cmp !== 0) return cmp;
+      return (a.studentCode || '').localeCompare(b.studentCode || '');
     });
 
     return students;

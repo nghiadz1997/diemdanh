@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getClassById, getClassMembers } from '@/services/classService';
 import { getSessionById, updateManualAttendance } from '@/services/attendanceService';
 import { ClassItem, LessonSession, ClassMember, AttendanceRecord, AttendanceStatus } from '@/types';
-import { formatDate, getAttendanceStatusBadge } from '@/lib/utils';
+import { formatDate, getAttendanceStatusBadge, compareVietnameseNames } from '@/lib/utils';
 import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
@@ -119,7 +119,16 @@ export default function TeacherAttendanceDashboardPage() {
       method: a.method || 'portal',
     }));
 
-  const allRows = [...studentRows, ...extraRows];
+  // Sắp xếp toàn bộ danh sách sinh viên theo thứ tự bảng chữ cái A, B, C (Tên chính, sau đó Họ và Tên đệm)
+  const allRows = [...studentRows, ...extraRows].sort((a, b) => {
+    const nameA = a.member.fullName || (a.member as any).user?.fullName || '';
+    const nameB = b.member.fullName || (b.member as any).user?.fullName || '';
+    const cmp = compareVietnameseNames(nameA, nameB);
+    if (cmp !== 0) return cmp;
+    const codeA = a.member.studentCode || (a.member as any).user?.studentCode || '';
+    const codeB = b.member.studentCode || (b.member as any).user?.studentCode || '';
+    return codeA.localeCompare(codeB);
+  });
 
   const totalStudents = allRows.length;
   const presentCount = allRows.filter((r) => r.status === 'present').length;

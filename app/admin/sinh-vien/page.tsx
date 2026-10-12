@@ -6,7 +6,7 @@ import { getClasses } from '@/services/classService';
 import { UserProfile, ClassItem } from '@/types';
 import { AddStudentModal } from '@/components/students/AddStudentModal';
 import { ImportStudentModal } from '@/components/students/ImportStudentModal';
-import { formatDate } from '@/lib/utils';
+import { formatDate, compareVietnameseNames } from '@/lib/utils';
 import {
   Users,
   UserPlus,
@@ -264,6 +264,10 @@ export default function StudentManagementPage() {
         : s.active === false;
 
     return matchSearch && matchClass && matchStatus;
+  }).sort((a, b) => {
+    const cmp = compareVietnameseNames(a.fullName, b.fullName);
+    if (cmp !== 0) return cmp;
+    return (a.studentCode || '').localeCompare(b.studentCode || '');
   });
 
   const getClassNameById = (classIds?: string[]) => {

@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ClassItem, ClassMember, UserProfile } from '@/types';
+import { compareVietnameseNames } from '@/lib/utils';
 
 export async function getClasses(): Promise<ClassItem[]> {
   try {
@@ -104,20 +105,36 @@ export async function getClassMembers(classId: string): Promise<ClassMember[]> {
     const q = query(membersRef, where('classId', '==', classId));
     const snap = await getDocs(q);
 
-    const members: ClassMember[] = [];
-    for (const d of snap.docs) {
-      const memberData = { id: d.id, ...d.data() } as ClassMember;
-      if (memberData.active === false) continue;
-      try {
-        const userDoc = await getDoc(doc(db, 'users', memberData.userId));
-        if (userDoc.exists()) {
-          memberData.user = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+    // Tải dữ liệu người dùng song song qua Promise.all giúp tải siêu tốc, không bị lag/chờ lâu
+    const activeDocs = snap.docs.filter((d) => (d.data() as any).active !== false);
+
+    const members: ClassMember[] = await Promise.all(
+      activeDocs.map(async (d) => {
+        const memberData = { id: d.id, ...d.data() } as ClassMember;
+        try {
+          if (memberData.userId) {
+            const userDoc = await getDoc(doc(db, 'users', memberData.userId));
+            if (userDoc.exists()) {
+              memberData.user = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+            }
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
-      }
-      members.push(memberData);
-    }
+        return memberData;
+      })
+    );
+
+    // Sắp xếp danh sách sinh viên lớp theo thứ tự A, B, C bảng chữ cái chuẩn Việt Nam
+    members.sort((a, b) => {
+      const nameA = a.fullName || a.user?.fullName || '';
+      const nameB = b.fullName || b.user?.fullName || '';
+      const cmp = compareVietnameseNames(nameA, nameB);
+      if (cmp !== 0) return cmp;
+      const codeA = a.studentCode || a.user?.studentCode || '';
+      const codeB = b.studentCode || b.user?.studentCode || '';
+      return codeA.localeCompare(codeB);
+    });
 
     return members;
   } catch (err) {
