@@ -534,7 +534,14 @@ export default function ClassDetailPage() {
                         )}
                       </td>
                       <td className="px-4 py-3.5 font-semibold text-slate-800">
-                        {m.fullName || m.user?.fullName || 'Sinh viên'}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{m.fullName || m.user?.fullName || 'Sinh viên'}</span>
+                          {((m.fullName || '').startsWith('Sinh viên ') || (m.studentCode || '').length > 15) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              Mã chưa xác định
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3.5">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${

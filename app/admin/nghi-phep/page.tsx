@@ -15,6 +15,8 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { LeaveRequest, AssignmentAttachment, ClassItem } from '@/types';
+import { getAllLeaveRequests, updateLeaveRequestStatus, deleteLeaveRequest } from '@/services/leaveRequestService';
+import { getClasses } from '@/services/classService';
 import { formatDate } from '@/lib/utils';
 import {
   FileCheck,
@@ -32,7 +34,9 @@ import {
   Calendar,
   User,
   GraduationCap,
+  Download,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
 export default function AdminLeaveApprovalPage() {
@@ -55,20 +59,12 @@ export default function AdminLeaveApprovalPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [reqSnap, classSnap] = await Promise.all([
-        getDocs(collection(db, 'leaveRequests')),
-        getDocs(collection(db, 'classes')),
+      const [list, cList] = await Promise.all([
+        getAllLeaveRequests(),
+        getClasses(),
       ]);
 
-      const list = reqSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveRequest));
-      list.sort((a, b) => {
-        const tA = (a.createdAt as any)?.toMillis ? (a.createdAt as any).toMillis() : 0;
-        const tB = (b.createdAt as any)?.toMillis ? (b.createdAt as any).toMillis() : 0;
-        return tB - tA;
-      });
       setRequests(list);
-
-      const cList = classSnap.docs.map((d) => ({ id: d.id, ...d.data() } as ClassItem));
       setClasses(cList);
     } catch (err) {
       console.error('Lỗi tải danh sách đơn nghỉ phép:', err);
@@ -86,11 +82,7 @@ export default function AdminLeaveApprovalPage() {
     setProcessingId(r.id);
     try {
       // 1. Cập nhật trạng thái đơn thành approved
-      await updateDoc(doc(db, 'leaveRequests', r.id), {
-        status: 'approved',
-        approvedBy: profile?.fullName || 'Quản trị viên',
-        updatedAt: serverTimestamp(),
-      });
+      await updateLeaveRequestStatus(r, 'approved');
 
       // 2. Ghi nhận trạng thái chuyên cần có phép (excused) vào attendance nếu có session hoặc ngày cụ thể
       try {
@@ -128,12 +120,11 @@ export default function AdminLeaveApprovalPage() {
     if (!rejectingRequest) return;
     setProcessingId(rejectingRequest.id);
     try {
-      await updateDoc(doc(db, 'leaveRequests', rejectingRequest.id), {
-        status: 'rejected',
-        adminNote: rejectNote.trim() || 'Lý do không hợp lệ hoặc thiếu minh chứng',
-        approvedBy: profile?.fullName || 'Quản trị viên',
-        updatedAt: serverTimestamp(),
-      });
+      await updateLeaveRequestStatus(
+        rejectingRequest,
+        'rejected',
+        rejectNote.trim() || 'Lý do không hợp lệ hoặc thiếu minh chứng'
+      );
 
       toast.info(`Đã từ chối đơn nghỉ phép của ${rejectingRequest.studentName}`);
       setRejectingRequest(null);
@@ -150,7 +141,7 @@ export default function AdminLeaveApprovalPage() {
   const handleDelete = async (r: LeaveRequest) => {
     if (!confirm(`Bạn có chắc muốn xóa đơn xin nghỉ phép của ${r.studentName} (${r.studentCode})?`)) return;
     try {
-      await deleteDoc(doc(db, 'leaveRequests', r.id));
+      await deleteLeaveRequest(r);
       toast.success('Đã xóa đơn xin nghỉ phép');
       fetchData();
     } catch (err) {
@@ -173,6 +164,68 @@ export default function AdminLeaveApprovalPage() {
   const approvedCount = requests.filter((r) => r.status === 'approved').length;
   const rejectedCount = requests.filter((r) => r.status === 'rejected').length;
 
+  const handleExportExcel = () => {
+    if (filteredRequests.length === 0) {
+      toast.info('Không có dữ liệu đơn nghỉ phép nào để xuất Excel');
+      return;
+    }
+
+    try {
+      const getStatusLabel = (status: string) => {
+        if (status === 'approved') return 'Đã phê duyệt';
+        if (status === 'rejected') return 'Bị từ chối';
+        return 'Chờ phê duyệt';
+      };
+
+      const exportData = filteredRequests.map((r, index) => {
+        const createdDateStr = r.createdAt
+          ? formatDate(r.createdAt, 'HH:mm dd/MM/yyyy')
+          : '';
+
+        return {
+          'STT': index + 1,
+          'Mã sinh viên': r.studentCode || '',
+          'Họ và tên': r.studentName || '',
+          'Lớp học': r.className || '',
+          'Từ ngày': r.fromDate || '',
+          'Đến ngày': r.toDate || '',
+          'Lý do xin nghỉ': r.reason || '',
+          'Trạng thái': getStatusLabel(r.status),
+          'Người duyệt': r.approvedBy || '',
+          'Ghi chú / Lý do từ chối': r.adminNote || '',
+          'Số tệp minh chứng': r.proofUrls?.length || 0,
+          'Thời gian nộp': createdDateStr,
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      ws['!cols'] = [
+        { wch: 6 },  // STT
+        { wch: 15 }, // Mã SV
+        { wch: 25 }, // Họ tên
+        { wch: 25 }, // Lớp học
+        { wch: 14 }, // Từ ngày
+        { wch: 14 }, // Đến ngày
+        { wch: 35 }, // Lý do
+        { wch: 16 }, // Trạng thái
+        { wch: 22 }, // Người duyệt
+        { wch: 30 }, // Ghi chú
+        { wch: 18 }, // Số minh chứng
+        { wch: 20 }, // Thời gian nộp
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'DonNghiPhep');
+      const filename = `Danh_sach_don_nghi_phep_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, filename);
+
+      toast.success(`Đã xuất ${exportData.length} đơn nghỉ phép ra file Excel thành công!`);
+    } catch (err: any) {
+      console.error('Lỗi xuất Excel đơn nghỉ phép:', err);
+      toast.error('Không thể xuất file Excel: ' + (err.message || 'Lỗi không xác định'));
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header & Stats Banner */}
@@ -187,6 +240,14 @@ export default function AdminLeaveApprovalPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportExcel}
+            className="py-2 px-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-2xl border border-emerald-200 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+            title="Xuất danh sách đơn nghỉ phép ra file Excel"
+          >
+            <Download className="w-4 h-4 text-emerald-600" />
+            <span>Xuất Excel</span>
+          </button>
           <span className="px-3 py-1.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 text-amber-600" />
             <span>{pendingCount} chờ duyệt</span>

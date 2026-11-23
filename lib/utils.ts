@@ -1,4 +1,4 @@
-﻿import { type ClassValue, clsx } from "clsx";
+import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
@@ -85,4 +85,29 @@ export function getAttendanceStatusBadge(status: string): { label: string; class
     default:
       return { label: "--", className: "bg-slate-50 text-slate-700 border-slate-200" };
   }
+}
+
+/**
+ * So sánh 2 họ tên người Việt theo bảng chữ cái A, B, C chuẩn:
+ * Ưu tiên 1: Tên chính (từ cuối cùng: An, Bình, Cường, Dũng, Giang, Hoa, Nam, Nghĩa...)
+ * Ưu tiên 2: Họ và Tên đệm (nếu trùng Tên chính)
+ */
+export function compareVietnameseNames(fullNameA?: string, fullNameB?: string): number {
+  const nameA = (fullNameA || '').trim();
+  const nameB = (fullNameB || '').trim();
+
+  if (!nameA && !nameB) return 0;
+  if (!nameA) return 1;
+  if (!nameB) return -1;
+
+  const partsA = nameA.split(/\s+/);
+  const partsB = nameB.split(/\s+/);
+
+  const firstNameA = partsA[partsA.length - 1];
+  const firstNameB = partsB[partsB.length - 1];
+
+  const cmp = firstNameA.localeCompare(firstNameB, 'vi', { sensitivity: 'base' });
+  if (cmp !== 0) return cmp;
+
+  return nameA.localeCompare(nameB, 'vi', { sensitivity: 'base' });
 }

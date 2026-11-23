@@ -163,12 +163,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    // Cổng điểm danh công khai dành cho mọi sinh viên/người dùng (không chặn, không chuyển hướng)
-    if (pathname === '/diem-danh' || pathname.startsWith('/diem-danh')) {
+    // Trang chủ (Cổng điểm danh nhanh) dành cho mọi sinh viên/người dùng
+    if (pathname === '/' || pathname === '/diem-danh' || pathname.startsWith('/diem-danh')) {
       return;
     }
 
-    const publicPaths = ['/dang-nhap', '/quen-mat-khau'];
+    const publicPaths = ['/dang-nhap', '/quen-mat-khau', '/dang-ky'];
     const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 
     if (!user && !isPublic) {
@@ -176,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user && isPublic) {
+    if (user && isPublic && pathname !== '/dang-ky') {
       // User is logged in and visits login page -> redirect to appropriate dashboard
       if (mustChangePassword) {
         router.push('/doi-mat-khau');

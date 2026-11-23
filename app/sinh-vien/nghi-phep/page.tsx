@@ -15,6 +15,7 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { ClassItem, LeaveRequest, AssignmentAttachment } from '@/types';
+import { submitLeaveRequest, getStudentLeaveRequests } from '@/services/leaveRequestService';
 import { formatDate } from '@/lib/utils';
 import {
   FileText,
@@ -84,17 +85,7 @@ export default function StudentLeaveRequestPage() {
       }
 
       // 2. Tải danh sách đơn xin nghỉ phép của sinh viên
-      const reqQ = query(
-        collection(db, 'leaveRequests'),
-        where('studentId', '==', user.uid)
-      );
-      const reqSnap = await getDocs(reqQ);
-      const list = reqSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveRequest));
-      list.sort((a, b) => {
-        const tA = (a.createdAt as any)?.toMillis ? (a.createdAt as any).toMillis() : 0;
-        const tB = (b.createdAt as any)?.toMillis ? (b.createdAt as any).toMillis() : 0;
-        return tB - tA;
-      });
+      const list = await getStudentLeaveRequests(user.uid);
       setRequests(list);
     } catch (err) {
       console.error('Lỗi tải dữ liệu nghỉ phép:', err);
@@ -167,7 +158,7 @@ export default function StudentLeaveRequestPage() {
       const targetClass = classes.find((c) => c.id === selectedClassId);
       const className = targetClass ? targetClass.className : 'Lớp học';
 
-      await addDoc(collection(db, 'leaveRequests'), {
+      await submitLeaveRequest({
         studentId: user.uid,
         studentCode: profile?.studentCode || '',
         studentName: profile?.fullName || 'Sinh viên',
@@ -178,8 +169,6 @@ export default function StudentLeaveRequestPage() {
         reason: reason.trim(),
         proofUrls: proofFiles,
         status: 'pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
 
       toast.success('Đã gửi đơn xin nghỉ phép thành công! Vui lòng chờ quản trị viên phê duyệt.');

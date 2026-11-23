@@ -126,5 +126,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // LEAVE REQUESTS (ĐƠN XIN NGHỈ PHÉP)
+    match /leaveRequests/{requestId} {
+      allow read, write: if true;
+    }
   }
 }

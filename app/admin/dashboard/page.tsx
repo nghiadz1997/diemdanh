@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { getStudents } from '@/services/studentService';
 import { getClasses } from '@/services/classService';
+import { getRecentLeaveRequests } from '@/services/leaveRequestService';
 import { collection, query, getDocs, limit, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { AttendanceRecord, ClassItem, LeaveRequest } from '@/types';
@@ -55,11 +56,11 @@ export default function AdminDashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const [students, classes, attSnap, leaveSnap] = await Promise.all([
+      const [students, classes, attSnap, allLeaves] = await Promise.all([
         getStudents(),
         getClasses(),
         getDocs(query(collection(db, 'attendance'), orderBy('createdAt', 'desc'), limit(100))),
-        getDocs(query(collection(db, 'leaveRequests'), orderBy('createdAt', 'desc'), limit(20))),
+        getRecentLeaveRequests(20),
       ]);
 
       setClassesList(classes);
@@ -74,7 +75,6 @@ export default function AdminDashboardPage() {
       const totalAtt = attList.length;
       const rate = totalAtt > 0 ? Math.round(((present + late) / totalAtt) * 100) : 100;
 
-      const allLeaves = leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveRequest));
       const pending = allLeaves.filter((l) => l.status === 'pending');
       setPendingLeaveList(pending.slice(0, 5));
 

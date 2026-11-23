@@ -68,17 +68,25 @@ export default function StudentClassesPage() {
                 </p>
               </div>
 
-              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-xs text-slate-400 font-medium">
+              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-400 font-medium truncate">
                   {c.academicYear} • {c.semester}
                 </span>
-                <Link
-                  href={`/lop-hoc/${c.id}/dien-dan`}
-                  className="inline-flex items-center gap-1.5 py-2 px-3.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold rounded-xl text-xs transition-colors"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>Diễn đàn lớp</span>
-                </Link>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Link
+                    href="/sinh-vien/diem-danh"
+                    className="inline-flex items-center gap-1 py-2 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl text-xs transition-colors"
+                  >
+                    <span>Điểm danh</span>
+                  </Link>
+                  <Link
+                    href={`/lop-hoc/${c.id}/dien-dan`}
+                    className="inline-flex items-center gap-1 py-2 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold rounded-xl text-xs transition-colors"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Diễn đàn</span>
+                  </Link>
+                </div>
               </div>
             </div>
           ))}
