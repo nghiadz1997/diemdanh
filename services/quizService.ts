@@ -13,6 +13,7 @@ export interface QuizHistoryRecord {
   id?: string;
   studentCode: string;
   studentName: string;
+  classId?: string;
   className?: string;
   action: 'start' | 'submit';
   mode: string;
@@ -31,6 +32,7 @@ export interface QuizHistoryRecord {
 export async function recordQuizHistory(data: {
   studentCode: string;
   studentName: string;
+  classId?: string;
   className?: string;
   action: 'start' | 'submit';
   mode: string;
@@ -52,6 +54,7 @@ export async function recordQuizHistory(data: {
 
     const docRef = await addDoc(collection(db, 'quizHistory'), {
       ...data,
+      studentCode: data.studentCode.trim().toUpperCase(),
       timeStr,
       createdAt: serverTimestamp(),
     });
@@ -81,6 +84,28 @@ export async function getRecentQuizHistory(maxCount: number = 30): Promise<QuizH
     })) as QuizHistoryRecord[];
   } catch (error) {
     console.error('Lỗi khi tải lịch sử làm bài từ Firestore:', error);
+    return [];
+  }
+}
+
+/**
+ * Lấy toàn bộ lịch sử trắc nghiệm phục vụ thống kê ai làm ai chưa làm
+ */
+export async function getAllQuizHistory(maxCount: number = 500): Promise<QuizHistoryRecord[]> {
+  try {
+    const q = query(
+      collection(db, 'quizHistory'),
+      orderBy('createdAt', 'desc'),
+      limit(maxCount)
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    })) as QuizHistoryRecord[];
+  } catch (error) {
+    console.error('Lỗi khi tải toàn bộ lịch sử:', error);
     return [];
   }
 }

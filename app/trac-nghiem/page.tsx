@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { MODULES, QUESTIONS, QuestionItem } from '@/lib/quiz-data';
 import { QuizVisual } from '@/components/quiz/QuizVisual';
@@ -34,6 +34,7 @@ import {
 interface IdentifiedStudent {
   studentCode: string;
   fullName: string;
+  classId?: string;
   className?: string;
   classCode?: string;
 }
@@ -189,11 +190,23 @@ export default function TracNghiemPortalPage() {
         );
         if (!snapM.empty) {
           const mData = snapM.docs[0].data();
-          const found = {
+          let cName = mData.className;
+          let cCode = mData.classCode;
+          if (!cName && mData.classId) {
+            try {
+              const cSnap = await getDoc(doc(db, 'classes', mData.classId));
+              if (cSnap.exists()) {
+                cName = cSnap.data().className;
+                cCode = cSnap.data().classCode;
+              }
+            } catch (e) {}
+          }
+          const found: IdentifiedStudent = {
             studentCode: code,
-            fullName: mData.fullName || `Sinh viên ${code}`,
-            className: mData.className,
-            classCode: mData.classCode,
+            fullName: (mData.fullName || `Sinh viên ${code}`).trim(),
+            classId: mData.classId,
+            className: cName,
+            classCode: cCode,
           };
           setDetectedStudent(found);
           setSearchingStudent(false);
@@ -251,10 +264,11 @@ export default function TracNghiemPortalPage() {
     recordQuizHistory({
       studentCode: finalStudent.studentCode,
       studentName: finalStudent.fullName,
+      classId: finalStudent.classId,
       className: finalStudent.className,
       action: 'start',
       mode: 'PORTAL',
-      title: 'Vào cổng ôn thi trắc nghiệm',
+      title: 'Nhập mã vào cổng ôn thi trắc nghiệm',
     });
 
     // Thực thi hành động đang chờ nếu có (ví dụ: bấm thi thử)
@@ -382,6 +396,7 @@ export default function TracNghiemPortalPage() {
     recordQuizHistory({
       studentCode: activeStudent.studentCode,
       studentName: activeStudent.fullName,
+      classId: activeStudent.classId,
       className: activeStudent.className,
       action: 'start',
       mode: 'PRACTICE',
@@ -428,6 +443,7 @@ export default function TracNghiemPortalPage() {
     recordQuizHistory({
       studentCode: activeStudent.studentCode,
       studentName: activeStudent.fullName,
+      classId: activeStudent.classId,
       className: activeStudent.className,
       action: 'start',
       mode: 'WRONG',
@@ -478,6 +494,7 @@ export default function TracNghiemPortalPage() {
     recordQuizHistory({
       studentCode: activeStudent.studentCode,
       studentName: activeStudent.fullName,
+      classId: activeStudent.classId,
       className: activeStudent.className,
       action: 'start',
       mode: 'EXAM',
@@ -569,6 +586,7 @@ export default function TracNghiemPortalPage() {
     recordQuizHistory({
       studentCode: student?.studentCode || 'N/A',
       studentName: student?.fullName || 'Sinh viên',
+      classId: student?.classId,
       className: student?.className,
       action: 'submit',
       mode: 'EXAM',
