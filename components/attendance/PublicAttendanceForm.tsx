@@ -36,7 +36,7 @@ interface AttendanceResult {
   alreadyMarked: boolean;
 }
 
-export function PublicAttendanceForm() {
+export function PublicAttendanceForm({ onSwitchToQuiz }: { onSwitchToQuiz?: () => void } = {}) {
   const { profile } = useAuth();
   const [studentCode, setStudentCode] = useState('');
   const [attendanceCode, setAttendanceCode] = useState('');
@@ -555,13 +555,24 @@ export function PublicAttendanceForm() {
       {/* Footer */}
       <footer className="text-center py-3 space-y-2.5">
         <div>
-          <Link
-            href="/trac-nghiem"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/90 border border-slate-200 text-xs font-bold text-blue-600 shadow-sm hover:bg-blue-50 hover:border-blue-300 transition"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-            <span>Ôn thi Trắc nghiệm CNTT Cơ bản (300 câu)</span>
-          </Link>
+          {onSwitchToQuiz ? (
+            <button
+              type="button"
+              onClick={onSwitchToQuiz}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/90 border border-slate-200 text-xs font-bold text-blue-600 shadow-sm hover:bg-blue-50 hover:border-blue-300 transition cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+              <span>Ôn thi Trắc nghiệm CNTT Cơ bản (300 câu)</span>
+            </button>
+          ) : (
+            <Link
+              href="/trac-nghiem"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/90 border border-slate-200 text-xs font-bold text-blue-600 shadow-sm hover:bg-blue-50 hover:border-blue-300 transition"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+              <span>Ôn thi Trắc nghiệm CNTT Cơ bản (300 câu)</span>
+            </Link>
+          )}
         </div>
         <div className="text-xs font-medium text-slate-400">
           Phát triển bởi: Thầy Nguyễn Trọng Nghĩa
