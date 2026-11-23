@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { getRoleDisplayName, getRoleBadgeColor } from '@/lib/utils';
-import { Bell, LogOut, User, Menu, X, ShieldAlert } from 'lucide-react';
+import { Bell, LogOut, User, Menu, X, ShieldAlert, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 
 interface NavbarProps {
@@ -45,6 +45,14 @@ export function Navbar({ onToggleMobileSidebar, isMobileSidebarOpen }: NavbarPro
       </div>
 
       <div className="flex items-center gap-3">
+        <Link
+          href="/trac-nghiem"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+          <span>Thi trắc nghiệm</span>
+        </Link>
+
         {profile && (
           <div className="hidden sm:flex items-center gap-2">
             <span

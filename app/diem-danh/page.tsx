@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ClassItem, LessonSession } from '@/types';
@@ -622,8 +623,19 @@ export default function PublicAttendancePortalPage() {
       </main>
 
       {/* Footer */}
-      <footer className="text-center py-4 text-xs font-medium text-slate-400">
-        Phát triển bởi: Thầy Nguyễn Trọng Nghĩa
+      <footer className="text-center py-4 space-y-2.5">
+        <div>
+          <Link
+            href="/trac-nghiem"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/90 border border-slate-200 text-xs font-bold text-blue-600 shadow-sm hover:bg-blue-50 hover:border-blue-300 transition"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+            <span>Ôn thi Trắc nghiệm CNTT Cơ bản (300 câu)</span>
+          </Link>
+        </div>
+        <div className="text-xs font-medium text-slate-400">
+          Phát triển bởi: Thầy Nguyễn Trọng Nghĩa
+        </div>
       </footer>
     </div>
   );

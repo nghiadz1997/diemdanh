@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Navbar } from '@/components/layout/Navbar';
 import { StudentBottomNav } from '@/components/layout/StudentBottomNav';
@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, GraduationCap, QrCode, FileText, Clock } from 'lucide-react';
+import { Home, GraduationCap, QrCode, FileText, Clock, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
@@ -31,6 +31,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     { href: '/sinh-vien/diem-danh', label: 'Điểm danh', icon: QrCode },
     { href: '/sinh-vien/bai-tap', label: 'Bài tập', icon: FileText },
     { href: '/sinh-vien/lich-su-diem-danh', label: 'Lịch sử điểm danh', icon: Clock },
+    { href: '/trac-nghiem', label: 'Thi trắc nghiệm (300 câu)', icon: Sparkles },
   ];
 
   return (
