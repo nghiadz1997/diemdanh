@@ -163,8 +163,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    // Trang chủ (Cổng điểm danh nhanh) dành cho mọi sinh viên/người dùng
-    if (pathname === '/' || pathname === '/diem-danh' || pathname.startsWith('/diem-danh')) {
+    // Trang chủ (Cổng điểm danh nhanh) & Cổng trắc nghiệm công khai
+    if (
+      pathname === '/' ||
+      pathname === '/diem-danh' ||
+      pathname.startsWith('/diem-danh') ||
+      pathname === '/trac-nghiem' ||
+      pathname.startsWith('/trac-nghiem')
+    ) {
       return;
     }
 
