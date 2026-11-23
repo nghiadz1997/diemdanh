@@ -13,7 +13,6 @@ import {
   Sparkles,
   UserCheck,
   QrCode,
-  LogIn,
   ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -38,7 +37,7 @@ interface AttendanceResult {
 }
 
 export function PublicAttendanceForm() {
-  const { user, profile, role } = useAuth();
+  const { profile } = useAuth();
   const [studentCode, setStudentCode] = useState('');
   const [attendanceCode, setAttendanceCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -46,7 +45,7 @@ export function PublicAttendanceForm() {
 
   const [referencedName, setReferencedName] = useState<string | null>(null);
 
-  // Tự động điền mã sinh viên nếu sinh viên đã đăng nhập
+  // Tự động điền mã sinh viên nếu sinh viên đã đăng nhập sẵn
   useEffect(() => {
     if (profile?.studentCode && !studentCode) {
       setStudentCode(profile.studentCode.toUpperCase());
@@ -63,20 +62,20 @@ export function PublicAttendanceForm() {
 
     const timer = setTimeout(async () => {
       try {
-        // 1. Tìm trong users (nguồn tài khoản sinh viên chính thức của trường)
+        // 1. Tìm trong users
         const snapU = await getDocs(
           query(collection(db, 'users'), where('studentCode', '==', clean))
         );
         if (!snapU.empty) {
           const uData = snapU.docs[0].data();
           const name = (uData.fullName || uData.displayName || '').trim();
-          if (name && !name.startsWith('Sinh viên ')) {
+          if (name) {
             setReferencedName(name);
             return;
           }
         }
 
-        // 2. Tìm trong classMembers chính thức (chỉ nhận hồ sơ có tên người thật)
+        // 2. Tìm trong classMembers
         const snapM = await getDocs(
           query(collection(db, 'classMembers'), where('studentCode', '==', clean))
         );
@@ -84,7 +83,7 @@ export function PublicAttendanceForm() {
           for (const d of snapM.docs) {
             const mData = d.data();
             const name = (mData.fullName || '').trim();
-            if (name && !name.startsWith('Sinh viên ') && mData.userId && !mData.userId.startsWith('sv_')) {
+            if (name) {
               setReferencedName(name);
               return;
             }
@@ -111,9 +110,8 @@ export function PublicAttendanceForm() {
       return;
     }
 
-    // Kiểm tra độ dài bất thường do gõ lặp / dán đúp mã (như trong trường hợp dán 2 lần)
-    if (cleanStudentCode.length > 15) {
-      toast.error(`Mã số sinh viên "${cleanStudentCode}" không hợp lệ (độ dài quá 15 ký tự do dán lặp mã). Vui lòng kiểm tra lại!`);
+    if (cleanStudentCode.length > 20) {
+      toast.error(`Mã số sinh viên "${cleanStudentCode}" không hợp lệ. Vui lòng kiểm tra lại!`);
       return;
     }
 
@@ -172,12 +170,12 @@ export function PublicAttendanceForm() {
         console.warn('Lỗi tìm thông tin lớp học:', classErr);
       }
 
-      // 3. XÁC THỰC MÃ SINH VIÊN BẮT BUỘC PHẢI THUỘC DANH SÁCH SINH VIÊN ĐÃ ĐƯỢC NHÀ TRƯỜNG CẤP
+      // 3. XÁC THỰC MÃ SINH VIÊN (CHỈ CẦN MSSV - KHÔNG BẮT ĐĂNG NHẬP)
       let finalFullName = '';
       let studentUid: string | null = null;
       let userProfileData: any = {};
 
-      // 3.1. Tìm trong collection users (nguồn chính thức của trường)
+      // 3.1. Tìm trong collection users
       try {
         const [snapUUpper, snapULower] = await Promise.all([
           getDocs(query(collection(db, 'users'), where('studentCode', '==', cleanStudentCode))),
@@ -198,7 +196,7 @@ export function PublicAttendanceForm() {
         console.warn('Lỗi tìm users:', uErr);
       }
 
-      // 3.2. Nếu chưa có trong users, tìm trong classMembers chính thức (chỉ nhận hồ sơ hợp lệ có tên người thật)
+      // 3.2. Tìm trong classMembers
       if (!studentUid || !finalFullName) {
         try {
           const snapM = await getDocs(
@@ -208,8 +206,8 @@ export function PublicAttendanceForm() {
             for (const mDoc of snapM.docs) {
               const mData = mDoc.data();
               const fName = (mData.fullName || '').trim();
-              if (fName && !fName.startsWith('Sinh viên ') && mData.userId && !mData.userId.startsWith('sv_')) {
-                studentUid = mData.userId;
+              if (fName) {
+                studentUid = mData.userId || mDoc.id;
                 finalFullName = fName;
                 userProfileData = { ...mData };
                 break;
@@ -221,16 +219,15 @@ export function PublicAttendanceForm() {
         }
       }
 
-      // RÀNG BUỘC NGHIÊM NGẶT: NẾU MSSV KHÔNG TỒN TẠI HOẶC CHƯA ĐƯỢC CẤP -> TỪ CHỐI ĐIỂM DANH!
-      if (!studentUid || !finalFullName || finalFullName.startsWith('Sinh viên ')) {
-        toast.error(
-          `Mã số sinh viên "${cleanStudentCode}" không tồn tại trong danh sách sinh viên được nhà trường cấp. Vui lòng kiểm tra lại chính xác MSSV của bạn hoặc liên hệ Giảng viên/Phòng Đào tạo!`
-        );
-        setSubmitting(false);
-        return;
+      // 3.3. Nếu chưa có sẵn trong danh sách, vẫn ghi nhận điểm danh theo MSSV (Không bắt đăng nhập)
+      if (!finalFullName) {
+        finalFullName = `Sinh viên ${cleanStudentCode}`;
+      }
+      if (!studentUid) {
+        studentUid = `sv_${cleanStudentCode.toLowerCase()}`;
       }
 
-      // Tự động liên kết sinh viên chính thức vào thành viên lớp nếu chưa có
+      // Tự động ghi nhận/cập nhật sinh viên vào thành viên lớp
       try {
         const memberKey = `${classId}_${studentUid}`;
         const memRef = doc(db, 'classMembers', memberKey);
@@ -272,9 +269,9 @@ export function PublicAttendanceForm() {
       });
 
       if (existingAtt.exists()) {
-        const attData = existingAtt.data();
+        const existingData = existingAtt.data();
         setResult({
-          studentName: attData.studentName || finalFullName,
+          studentName: existingData.studentName || finalFullName,
           studentCode: cleanStudentCode,
           gender: userProfileData.gender,
           dateOfBirth: userProfileData.dateOfBirth,
@@ -286,53 +283,44 @@ export function PublicAttendanceForm() {
           className: classDoc?.className || 'Lớp học',
           classCode: classDoc?.classCode || '',
           sessionTitle: targetSession.title || 'Buổi học',
-          checkInTime: attData.checkInTimeStr || checkInTimeStr,
+          checkInTime: existingData.checkInTime || checkInTimeStr,
           alreadyMarked: true,
         });
-        toast.info(`Sinh viên ${finalFullName} (${cleanStudentCode}) đã được điểm danh CÓ MẶT trong buổi học này trước đó!`);
+
+        toast.info(`Bạn đã điểm danh buổi học này rồi (${existingData.checkInTime || checkInTimeStr})`);
         setSubmitting(false);
         return;
       }
 
-      // 5. GHI NHẬN ĐIỂM DANH MỚI
-      await setDoc(attRef, {
+      // 5. GHI NHẬN ĐIỂM DANH VÀO FIRESTORE
+      const attendanceRecord = {
         sessionId: targetSession.id,
-        sessionTitle: targetSession.title || 'Buổi học',
         classId: classId,
-        className: classDoc?.className || 'Lớp học',
-        classCode: classDoc?.classCode || '',
+        studentId: studentUid,
         studentCode: cleanStudentCode,
         studentName: finalFullName,
-        userId: studentUid || `sv_${cleanStudentCode}`,
-        gender: userProfileData.gender || null,
-        dateOfBirth: userProfileData.dateOfBirth || null,
-        phone: userProfileData.phone || null,
-        cccd: userProfileData.cccd || null,
-        placeOfBirth: userProfileData.placeOfBirth || null,
-        hometown: userProfileData.hometown || null,
-        permanentAddress: userProfileData.permanentAddress || null,
         status: 'present',
-        method: 'portal',
-        checkInTime: serverTimestamp(),
-        checkInTimeStr,
+        method: 'code',
+        checkInTime: checkInTimeStr,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
 
-      // Tự động gửi thông báo điểm danh về Bot Telegram
-      sendAttendanceTelegramNotification({
-        studentName: finalFullName,
-        studentCode: cleanStudentCode,
-        className: classDoc?.className || 'Lớp học',
-        classCode: classDoc?.classCode || '',
-        sessionTitle: targetSession.title || 'Buổi học',
-        checkInTime: checkInTimeStr,
-        phone: userProfileData.phone || undefined,
-        gender: userProfileData.gender || undefined,
-        cccd: userProfileData.cccd || undefined,
-        status: 'present',
-        method: 'portal',
-      });
+      await setDoc(attRef, attendanceRecord);
+
+      // Gửi thông báo Telegram nếu được cấu hình
+      try {
+        await sendAttendanceTelegramNotification({
+          studentName: finalFullName,
+          studentCode: cleanStudentCode,
+          className: classDoc?.className || 'Lớp học',
+          sessionTitle: targetSession.title || 'Buổi học',
+          checkInTime: checkInTimeStr,
+          status: 'present',
+        });
+      } catch (teleErr) {
+        console.warn('Lỗi gửi Telegram:', teleErr);
+      }
 
       setResult({
         studentName: finalFullName,
@@ -369,58 +357,7 @@ export function PublicAttendanceForm() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex flex-col justify-between p-4 sm:p-6">
-      {/* Top Navbar Header */}
-      <header className="w-full max-w-4xl mx-auto flex items-center justify-between py-2 px-1 mb-2">
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-white p-1.5 shadow-md border border-slate-100 flex items-center justify-center shrink-0">
-            <img src="/logo.png" alt="Logo CĐ Bách Khoa Nam Sài Gòn" className="w-full h-full object-contain" />
-          </div>
-          <div>
-            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-indigo-700 block">
-              TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN
-            </span>
-            <span className="text-xs sm:text-sm font-black text-slate-900 block">
-              HỆ THỐNG ĐIỂM DANH SINH VIÊN
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {user ? (
-            <Link
-              href={
-                role === 'super_admin' || role === 'admin'
-                  ? '/admin/dashboard'
-                  : role === 'teacher'
-                  ? '/giang-vien/dashboard'
-                  : '/sinh-vien/dashboard'
-              }
-              className="py-2 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95"
-            >
-              <span>Vào Bảng điều khiển</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Link
-                href="/dang-ky"
-                className="py-2 px-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-all shadow-sm active:scale-95"
-              >
-                Đăng ký sinh viên
-              </Link>
-              <Link
-                href="/dang-nhap"
-                className="py-2 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 transition-all shadow-md active:scale-95"
-              >
-                <span>Đăng nhập</span>
-                <LogIn className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* Main Content */}
+      {/* Main Content (Không có header ngoài, không có nút Đăng nhập) */}
       <main className="max-w-md w-full mx-auto my-auto py-4">
         {!result ? (
           /* Check-In Form Card */
@@ -430,16 +367,16 @@ export function PublicAttendanceForm() {
               <div className="w-20 h-20 mx-auto rounded-3xl bg-white p-2 shadow-lg shadow-indigo-100 border border-slate-100 flex items-center justify-center">
                 <img
                   src="/logo.png"
-                  alt="Logo TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN"
+                  alt="Logo Trường Cao Đẳng Nghề NSG"
                   className="w-full h-full object-contain"
                 />
               </div>
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 block">
-                  TRƯỜNG CAO ĐẲNG BÁCH KHOA NAM SÀI GÒN
+                  Trường Cao Đẳng Nghề NSG
                 </span>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 mt-0.5">
-                  Điểm Danh Buổi Học
+                  Hệ Thống Điểm Danh Sinh Viên
                 </h1>
               </div>
             </div>
@@ -468,22 +405,19 @@ export function PublicAttendanceForm() {
                 {referencedName ? (
                   <div className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold animate-in fade-in">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                    <span>
-                      Họ và tên: <strong className="text-emerald-950 font-bold">{referencedName}</strong>
-                    </span>
+                    <span>Sinh viên: <strong>{referencedName}</strong></span>
                   </div>
-                ) : studentCode.trim().length >= 4 ? (
-                  <div className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-medium animate-in fade-in">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                    <span>Chưa tìm thấy sinh viên có mã này trong danh sách cấp của trường</span>
-                  </div>
-                ) : null}
+                ) : (
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Chỉ cần nhập MSSV của bạn, không cần tài khoản hay mật khẩu đăng nhập.
+                  </p>
+                )}
               </div>
 
-              {/* MÃ ĐIỂM DANH BUỔI HỌC (6 CHỮ SỐ) */}
+              {/* MÃ ĐIỂM DANH */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                  Mã điểm danh buổi học (6 chữ số)
+                  Mã điểm danh (6 chữ số)
                 </label>
                 <div className="relative">
                   <input
@@ -492,64 +426,56 @@ export function PublicAttendanceForm() {
                     maxLength={6}
                     value={attendanceCode}
                     onChange={(e) => setAttendanceCode(e.target.value.replace(/\D/g, ''))}
-                    placeholder="------"
-                    className="w-full px-4 py-3.5 bg-slate-50 border-2 border-indigo-100 rounded-2xl text-slate-900 font-mono font-black text-center text-3xl tracking-[0.4em] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white transition-all placeholder:text-slate-300 placeholder:tracking-[0.4em]"
+                    placeholder="• • • • • •"
+                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-mono font-black text-center text-xl tracking-[0.3em] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-300 placeholder:text-sm"
                     required
                   />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <QrCode className="w-5 h-5 text-indigo-400" />
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
+                    <QrCode className="w-5 h-5 text-slate-400" />
                   </div>
                 </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Nhập mã số 6 chữ số do Giảng viên cung cấp tại lớp học.
+                </p>
               </div>
 
-              {/* Nút Điểm Danh */}
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full py-4 px-4 bg-gradient-to-r from-indigo-600 via-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-2xl shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 active:scale-[0.99] transition-all disabled:opacity-60 cursor-pointer text-sm"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Đang xác thực & ghi nhận...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-5 h-5" />
-                      <span>Xác Nhận Điểm Danh</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              {/* Nút bấm điểm danh */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-4 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] mt-2"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Đang xác nhận điểm danh...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span>Xác Nhận Có Mặt</span>
+                  </>
+                )}
+              </button>
             </form>
           </div>
         ) : (
-          /* Success Screen Card */
-          <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/50 text-slate-800 border border-slate-100 text-center space-y-6">
-            <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center ring-8 ring-emerald-50/50 shadow-lg shadow-emerald-500/20">
-              <CheckCircle2 className="w-12 h-12" />
+          /* Success Result Card */
+          <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/50 text-slate-800 border border-slate-100 text-center space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-100">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
 
-            <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 mb-1">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{result.alreadyMarked ? 'Đã ghi nhận từ trước' : 'Điểm danh thành công'}</span>
-              </div>
-              <h2 className="text-2xl font-black text-slate-900">
-                {result.alreadyMarked ? 'ĐÃ ĐIỂM DANH CÓ MẶT' : 'GHI NHẬN CÓ ĐI HỌC'}
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 block">
+                {result.alreadyMarked ? 'Đã Ghi Nhận Trước Đó' : 'Điểm Danh Thành Công!'}
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
+                {result.studentName}
               </h2>
-              <p className="text-xs text-slate-500">
-                Buổi học của bạn đã được xác nhận hiện diện trên hệ thống
-              </p>
             </div>
 
-            {/* Thông tin chi tiết */}
-            <div className="bg-slate-50 rounded-2xl p-4 text-left space-y-2.5 text-xs border border-slate-200/80 font-medium">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
-                <span className="text-slate-500">Họ và tên:</span>
-                <span className="font-bold text-slate-900 text-sm">{result.studentName}</span>
-              </div>
+            <div className="bg-slate-50 rounded-2xl p-4 text-xs space-y-2.5 text-left border border-slate-100">
               <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
                 <span className="text-slate-500">Mã sinh viên:</span>
                 <span className="font-mono font-bold text-indigo-600 text-sm">
@@ -627,8 +553,19 @@ export function PublicAttendanceForm() {
       </main>
 
       {/* Footer */}
-      <footer className="text-center py-3 text-xs font-medium text-slate-400">
-        Phát triển bởi: Thầy Nguyễn Trọng Nghĩa
+      <footer className="text-center py-3 space-y-2.5">
+        <div>
+          <Link
+            href="/trac-nghiem"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/90 border border-slate-200 text-xs font-bold text-blue-600 shadow-sm hover:bg-blue-50 hover:border-blue-300 transition"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+            <span>Ôn thi Trắc nghiệm CNTT Cơ bản (300 câu)</span>
+          </Link>
+        </div>
+        <div className="text-xs font-medium text-slate-400">
+          Phát triển bởi: Thầy Nguyễn Trọng Nghĩa
+        </div>
       </footer>
     </div>
   );
