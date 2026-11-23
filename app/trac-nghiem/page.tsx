@@ -1,38 +1,30 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import Link from 'next/link';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
-import { MODULES, QUESTIONS, QuestionItem, ModuleInfo } from '@/lib/quiz-data';
+import { MODULES, QUESTIONS, QuestionItem } from '@/lib/quiz-data';
 import { QuizVisual } from '@/components/quiz/QuizVisual';
 import { toast } from 'sonner';
 import {
   Clock,
   CheckCircle2,
-  XCircle,
-  HelpCircle,
-  RotateCcw,
-  Search,
   BookOpen,
-  Award,
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Sun,
   Moon,
-  Home,
   UserCheck,
   User,
   GraduationCap,
   Sparkles,
   Shuffle,
-  Eye,
-  LogOut,
-  ChevronRight,
+  Search,
   Check,
-  X
+  X,
+  RotateCcw
 } from 'lucide-react';
 
 interface IdentifiedStudent {
@@ -58,12 +50,14 @@ const STORAGE_STUDENT_KEY = 'bk_cntt_300_student_v2';
 export default function TracNghiemPortalPage() {
   const { profile } = useAuth();
 
-  // 1. Quản lý nhận diện sinh viên
+  // 1. Quản lý nhận diện sinh viên (Chỉ cần MSSV, không bắt buộc đăng nhập)
   const [student, setStudent] = useState<IdentifiedStudent | null>(null);
   const [inputCode, setInputCode] = useState('');
+  const [customName, setCustomName] = useState('');
   const [searchingStudent, setSearchingStudent] = useState(false);
   const [detectedStudent, setDetectedStudent] = useState<IdentifiedStudent | null>(null);
   const [showStudentModal, setShowStudentModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   // 2. Trạng thái Quiz & Navigation
   const [view, setView] = useState<'HOME' | 'QUIZ' | 'RESULT' | 'SEARCH'>('HOME');
@@ -101,8 +95,8 @@ export default function TracNghiemPortalPage() {
 
   // Khởi tạo DarkMode & LocalStorage
   useEffect(() => {
-    // Theme
-    const isDark = document.documentElement.classList.contains('dark') ||
+    const isDark =
+      document.documentElement.classList.contains('dark') ||
       localStorage.getItem('bk_theme') === 'dark';
     setIsDarkMode(isDark);
     if (isDark) document.documentElement.classList.add('dark');
@@ -118,16 +112,18 @@ export default function TracNghiemPortalPage() {
       }
     } catch (e) {}
 
-    // Nhận diện sinh viên đã lưu
+    // Nhận diện sinh viên đã lưu từ trước (không cần đăng nhập lại)
     try {
       const rawStudent = localStorage.getItem(STORAGE_STUDENT_KEY);
       if (rawStudent) {
-        setStudent(JSON.parse(rawStudent));
+        const s = JSON.parse(rawStudent);
+        setStudent(s);
+        setInputCode(s.studentCode || '');
       }
     } catch (e) {}
   }, []);
 
-  // Tự động nhận diện nếu sinh viên đang đăng nhập trên hệ thống
+  // Tự động nhận diện nếu sinh viên đang đăng nhập sẵn trên máy
   useEffect(() => {
     if (profile?.role === 'student' && profile.studentCode) {
       const currentStu: IdentifiedStudent = {
@@ -152,7 +148,7 @@ export default function TracNghiemPortalPage() {
     []
   );
 
-  // Tra cứu sinh viên theo MSSV thời gian thực khi người dùng nhập
+  // Tra cứu sinh viên theo MSSV thời gian thực khi người dùng gõ
   useEffect(() => {
     const code = inputCode.trim().toUpperCase();
     if (code.length < 2) {
@@ -169,12 +165,13 @@ export default function TracNghiemPortalPage() {
         );
         if (!snapM.empty) {
           const mData = snapM.docs[0].data();
-          setDetectedStudent({
+          const found = {
             studentCode: code,
-            fullName: mData.fullName || 'Sinh viên',
+            fullName: mData.fullName || `Sinh viên ${code}`,
             className: mData.className,
             classCode: mData.classCode,
-          });
+          };
+          setDetectedStudent(found);
           setSearchingStudent(false);
           return;
         }
@@ -185,10 +182,11 @@ export default function TracNghiemPortalPage() {
         );
         if (!snapU.empty) {
           const uData = snapU.docs[0].data();
-          setDetectedStudent({
+          const found = {
             studentCode: code,
-            fullName: uData.fullName || uData.displayName || 'Sinh viên',
-          });
+            fullName: uData.fullName || uData.displayName || `Sinh viên ${code}`,
+          };
+          setDetectedStudent(found);
           setSearchingStudent(false);
           return;
         }
@@ -199,32 +197,45 @@ export default function TracNghiemPortalPage() {
       } finally {
         setSearchingStudent(false);
       }
-    }, 350);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [inputCode]);
 
-  // Xác nhận lưu thông tin sinh viên
-  const handleConfirmStudent = () => {
-    if (!detectedStudent) {
-      const code = inputCode.trim().toUpperCase();
-      if (!code) {
-        toast.error('Vui lòng nhập Mã số sinh viên (MSSV)');
-        return;
-      }
-      toast.error('Không tìm thấy Mã sinh viên này trong danh sách trường. Vui lòng kiểm tra lại!');
-      return;
+  // Xác nhận lưu thông tin sinh viên chỉ bằng Mã SV (không cần đăng nhập)
+  const handleConfirmStudent = (overrideCode?: string) => {
+    const code = (overrideCode || inputCode).trim().toUpperCase();
+    if (!code) {
+      toast.error('Vui lòng nhập Mã số sinh viên (MSSV)');
+      setShowStudentModal(true);
+      return null;
     }
 
-    setStudent(detectedStudent);
-    localStorage.setItem(STORAGE_STUDENT_KEY, JSON.stringify(detectedStudent));
+    const finalStudent: IdentifiedStudent = detectedStudent && detectedStudent.studentCode === code
+      ? detectedStudent
+      : {
+          studentCode: code,
+          fullName: customName.trim() || (detectedStudent?.fullName) || `Sinh viên ${code}`,
+        };
+
+    setStudent(finalStudent);
+    localStorage.setItem(STORAGE_STUDENT_KEY, JSON.stringify(finalStudent));
     setShowStudentModal(false);
-    toast.success(`Xin chào sinh viên: ${detectedStudent.fullName}`);
+    toast.success(`Đã nhận diện: ${finalStudent.fullName} (${finalStudent.studentCode})`);
+
+    // Thực thi hành động đang chờ nếu có (ví dụ: bấm thi thử)
+    if (pendingAction) {
+      pendingAction();
+      setPendingAction(null);
+    }
+
+    return finalStudent;
   };
 
-  // Đổi sinh viên
+  // Mở modal đổi sinh viên
   const handleChangeStudent = () => {
     setInputCode(student?.studentCode || '');
+    setCustomName(student?.fullName || '');
     setShowStudentModal(true);
   };
 
@@ -291,11 +302,17 @@ export default function TracNghiemPortalPage() {
     return `${m}:${s}`;
   };
 
-  // Bắt đầu luyện tập theo Module hoặc tất cả
+  // Bắt đầu luyện tập
   const startPractice = (moduleId: number = 0, shuffle: boolean = false) => {
     if (!student) {
-      setShowStudentModal(true);
-      return;
+      if (inputCode.trim()) {
+        const s = handleConfirmStudent();
+        if (!s) return;
+      } else {
+        setPendingAction(() => () => startPractice(moduleId, shuffle));
+        setShowStudentModal(true);
+        return;
+      }
     }
     let list = moduleId === 0 ? [...QUESTIONS] : QUESTIONS.filter((q) => q.module === moduleId);
     if (shuffle) {
@@ -322,8 +339,14 @@ export default function TracNghiemPortalPage() {
   // Bắt đầu ôn các câu làm sai
   const startWrongPractice = () => {
     if (!student) {
-      setShowStudentModal(true);
-      return;
+      if (inputCode.trim()) {
+        const s = handleConfirmStudent();
+        if (!s) return;
+      } else {
+        setPendingAction(() => () => startWrongPractice());
+        setShowStudentModal(true);
+        return;
+      }
     }
     const list = QUESTIONS.filter((q) => wrongIds.includes(q.id));
     if (list.length === 0) {
@@ -344,8 +367,14 @@ export default function TracNghiemPortalPage() {
   // Bắt đầu thi thử chuẩn (30 câu - 30 phút, 5 câu mỗi Module)
   const startExam = () => {
     if (!student) {
-      setShowStudentModal(true);
-      return;
+      if (inputCode.trim()) {
+        const s = handleConfirmStudent();
+        if (!s) return;
+      } else {
+        setPendingAction(() => () => startExam());
+        setShowStudentModal(true);
+        return;
+      }
     }
     let examList: QuestionItem[] = [];
     for (let m = 1; m <= 6; m++) {
@@ -517,12 +546,12 @@ export default function TracNghiemPortalPage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Huy hiệu thông tin sinh viên */}
+            {/* Thẻ hiển thị sinh viên ở Header */}
             {student ? (
               <div
                 onClick={handleChangeStudent}
                 className="cursor-pointer flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 transition text-left"
-                title="Nhấp để đổi MSSV"
+                title="Nhấp để đổi MSSV khác"
               >
                 <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
                   <User className="w-4 h-4" />
@@ -580,7 +609,7 @@ export default function TracNghiemPortalPage() {
       <main className="flex-grow max-w-6xl w-full mx-auto px-4 py-6 sm:py-8">
         {/* ===================== VIEW: HOME ===================== */}
         {view === 'HOME' && (
-          <div className="space-y-8 animate-in fade-in duration-300">
+          <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
             {/* Banner chính */}
             <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-indigo-600 to-indigo-900 text-white p-6 sm:p-8 shadow-xl shadow-blue-600/15">
               <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -593,7 +622,7 @@ export default function TracNghiemPortalPage() {
                     Cổng Luyện thi Trắc nghiệm CNTT Chuẩn
                   </h2>
                   <p className="text-blue-100 text-sm sm:text-base leading-relaxed">
-                    Đầy đủ 300 câu hỏi chia theo 6 Module chuẩn. Hỗ trợ thi thử tính giờ 30 phút, luyện tập có giải thích đáp án, và tự động ghi nhớ câu làm sai để sinh viên ôn lại.
+                    Đầy đủ 300 câu hỏi chia theo 6 Module chuẩn. Sinh viên chỉ cần nhập Mã số sinh viên (MSSV) là có thể thi thử và ôn tập ngay lập tức mà không cần đăng nhập.
                   </p>
                 </div>
 
@@ -620,8 +649,73 @@ export default function TracNghiemPortalPage() {
               </div>
             </section>
 
-            {/* Thông báo sinh viên đang làm bài */}
-            {student ? (
+            {/* FORM NHẬP MÃ SINH VIÊN TRỰC TIẾP (KHÔNG CẦN ĐĂNG NHẬP) */}
+            {!student ? (
+              <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 border-2 border-blue-200 dark:border-blue-800/60 shadow-md">
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20">
+                      <GraduationCap className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                        Nhập Mã Sinh Viên để làm bài (Không cần tài khoản)
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Chỉ cần nhập MSSV của bạn, hệ thống sẽ tự động tra cứu tên và cấp đề thi ngay
+                      </p>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleConfirmStudent();
+                    }}
+                    className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
+                  >
+                    <div className="relative flex-1 sm:w-64">
+                      <input
+                        type="text"
+                        value={inputCode}
+                        onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                        placeholder="Nhập MSSV (VD: 21CD001)..."
+                        className="w-full px-4 py-2.5 rounded-xl border border-blue-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-bold text-sm tracking-wide focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase shadow-inner"
+                      />
+                      {searchingStudent && (
+                        <div className="absolute right-3 top-2.5 text-xs text-slate-400 animate-spin">
+                          ⏳
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={!inputCode.trim()}
+                      className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-sm shadow-md shadow-blue-600/20 transition whitespace-nowrap cursor-pointer"
+                    >
+                      Bắt đầu làm bài ngay
+                    </button>
+                  </form>
+                </div>
+
+                {/* Hiển thị tên tự động tìm thấy */}
+                {detectedStudent ? (
+                  <div className="mt-3.5 pt-3 border-t border-blue-200/60 dark:border-slate-800 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 font-semibold">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                    <span>
+                      Đã nhận diện: <strong>{detectedStudent.fullName}</strong>
+                      {detectedStudent.className && ` • Lớp: ${detectedStudent.className}`}
+                    </span>
+                  </div>
+                ) : inputCode.trim().length >= 2 && !searchingStudent ? (
+                  <div className="mt-3.5 pt-3 border-t border-blue-200/60 dark:border-slate-800 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <UserCheck className="w-4 h-4 shrink-0 text-blue-500" />
+                    <span>Bấm &quot;Bắt đầu làm bài ngay&quot; để vào ôn tập và làm bài thi với mã này.</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              /* Thẻ sinh viên đã được nhận diện */
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 flex items-center justify-center font-bold">
@@ -644,28 +738,13 @@ export default function TracNghiemPortalPage() {
                   Đổi Mã Sinh Viên
                 </button>
               </div>
-            ) : (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <div className="text-sm text-amber-900 dark:text-amber-200">
-                    Bạn chưa gắn Mã số sinh viên (MSSV). Hãy nhập mã để hệ thống hiển thị tên và ghi nhận điểm số của bạn!
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowStudentModal(true)}
-                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 shadow transition"
-                >
-                  Nhập mã SV ngay
-                </button>
-              </div>
             )}
 
             {/* 4 Chế độ chính */}
             <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <button
                 onClick={startExam}
-                className="group text-left p-5 rounded-2xl bg-white dark:bg-slate-900 border-2 border-emerald-500/30 hover:border-emerald-500 shadow-sm hover:shadow-md transition-all"
+                className="group text-left p-5 rounded-2xl bg-white dark:bg-slate-900 border-2 border-emerald-500/30 hover:border-emerald-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
               >
                 <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-4 group-hover:scale-110 transition">
                   <Clock className="w-6 h-6" />
@@ -678,7 +757,7 @@ export default function TracNghiemPortalPage() {
 
               <button
                 onClick={() => startPractice(0, false)}
-                className="group text-left p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 shadow-sm hover:shadow-md transition-all"
+                className="group text-left p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
               >
                 <div className="w-11 h-11 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-4 group-hover:scale-110 transition">
                   <BookOpen className="w-6 h-6" />
@@ -691,7 +770,7 @@ export default function TracNghiemPortalPage() {
 
               <button
                 onClick={startWrongPractice}
-                className="group text-left p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-amber-500 shadow-sm hover:shadow-md transition-all"
+                className="group text-left p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-amber-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
               >
                 <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-4 group-hover:scale-110 transition">
                   <AlertTriangle className="w-6 h-6" />
@@ -706,7 +785,7 @@ export default function TracNghiemPortalPage() {
 
               <button
                 onClick={() => setView('SEARCH')}
-                className="group text-left p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 shadow-sm hover:shadow-md transition-all"
+                className="group text-left p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
               >
                 <div className="w-11 h-11 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-4 group-hover:scale-110 transition">
                   <Search className="w-6 h-6" />
@@ -726,7 +805,7 @@ export default function TracNghiemPortalPage() {
                 </h3>
                 <button
                   onClick={() => startPractice(0, true)}
-                  className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                  className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
                 >
                   <Shuffle className="w-3.5 h-3.5" />
                   <span>Trộn ngẫu nhiên 300 câu</span>
@@ -763,13 +842,13 @@ export default function TracNghiemPortalPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => startPractice(m.id, false)}
-                          className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition"
+                          className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer"
                         >
                           Ôn tuần tự
                         </button>
                         <button
                           onClick={() => startPractice(m.id, true)}
-                          className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition"
+                          className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition cursor-pointer"
                           title="Xáo trộn câu hỏi"
                         >
                           Trộn đề
@@ -788,7 +867,7 @@ export default function TracNghiemPortalPage() {
                   <h3 className="font-bold text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Lịch sử thi thử gần đây
                   </h3>
-                  <button onClick={clearProgress} className="text-xs text-red-500 hover:underline font-semibold">
+                  <button onClick={clearProgress} className="text-xs text-red-500 hover:underline font-semibold cursor-pointer">
                     Xóa dữ liệu tiến độ
                   </button>
                 </div>
@@ -858,7 +937,7 @@ export default function TracNghiemPortalPage() {
                   {mode !== 'EXAM' && !reviewMode && (
                     <button
                       onClick={() => setShowKeyMode(!showKeyMode)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-bold border transition ${
+                      className={`px-2.5 py-1 rounded-full text-xs font-bold border transition cursor-pointer ${
                         showKeyMode
                           ? 'bg-amber-100 border-amber-400 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
                           : 'bg-slate-100 border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
@@ -920,7 +999,7 @@ export default function TracNghiemPortalPage() {
                     <button
                       key={i}
                       onClick={() => handleSelectOption(i)}
-                      className={`w-full text-left p-3.5 sm:p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-3 ${btnCls}`}
+                      className={`w-full text-left p-3.5 sm:p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-3 cursor-pointer ${btnCls}`}
                     >
                       <div className="flex items-start sm:items-center gap-3">
                         <span
@@ -941,7 +1020,7 @@ export default function TracNghiemPortalPage() {
                 <button
                   onClick={() => setCurrentIndex((prev) => Math.max(prev - 1, 0))}
                   disabled={currentIndex === 0}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-sm font-bold disabled:opacity-40 transition"
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-sm font-bold disabled:opacity-40 transition cursor-pointer"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>Câu trước</span>
@@ -949,7 +1028,7 @@ export default function TracNghiemPortalPage() {
                 <button
                   onClick={() => setCurrentIndex((prev) => Math.min(prev + 1, quizList.length - 1))}
                   disabled={currentIndex === quizList.length - 1}
-                  className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-40 transition shadow-md shadow-blue-600/20"
+                  className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-40 transition shadow-md shadow-blue-600/20 cursor-pointer"
                 >
                   <span>Câu tiếp</span>
                   <ArrowRight className="w-4 h-4" />
@@ -988,7 +1067,7 @@ export default function TracNghiemPortalPage() {
                     <button
                       key={i}
                       onClick={() => setCurrentIndex(i)}
-                      className={`h-9 rounded-lg text-xs font-bold border transition ${btnCls} ${
+                      className={`h-9 rounded-lg text-xs font-bold border transition cursor-pointer ${btnCls} ${
                         isCurr
                           ? 'ring-2 ring-offset-2 ring-slate-900 dark:ring-white dark:ring-offset-slate-900 scale-105'
                           : ''
@@ -1004,7 +1083,7 @@ export default function TracNghiemPortalPage() {
                 {mode === 'EXAM' && !reviewMode && (
                   <button
                     onClick={confirmFinishExam}
-                    className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition"
+                    className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition cursor-pointer"
                   >
                     Nộp bài &amp; Chấm điểm
                   </button>
@@ -1012,14 +1091,14 @@ export default function TracNghiemPortalPage() {
                 {reviewMode && (
                   <button
                     onClick={() => setView('RESULT')}
-                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm transition"
+                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm transition cursor-pointer"
                   >
                     Quay lại bảng điểm
                   </button>
                 )}
                 <button
                   onClick={confirmGoHome}
-                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition"
+                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition cursor-pointer"
                 >
                   Về Trang chủ
                 </button>
@@ -1099,20 +1178,20 @@ export default function TracNghiemPortalPage() {
                         setCurrentIndex(0);
                         setView('QUIZ');
                       }}
-                      className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-600/20 transition"
+                      className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-600/20 transition cursor-pointer"
                     >
                       Xem lại chi tiết đáp án từng câu
                     </button>
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         onClick={startExam}
-                        className="py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold text-sm transition"
+                        className="py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold text-sm transition cursor-pointer"
                       >
                         Thi đề mới
                       </button>
                       <button
                         onClick={() => setView('HOME')}
-                        className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-bold text-sm transition"
+                        className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-bold text-sm transition cursor-pointer"
                       >
                         Về Trang chủ
                       </button>
@@ -1229,7 +1308,7 @@ export default function TracNghiemPortalPage() {
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Nhập Mã Sinh Viên (MSSV)</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Hệ thống sẽ tra cứu tên sinh viên của trường
+                  Không cần tài khoản hay mật khẩu đăng nhập
                 </p>
               </div>
             </div>
@@ -1237,7 +1316,7 @@ export default function TracNghiemPortalPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1.5">
-                  Mã số sinh viên (MSSV)
+                  Mã số sinh viên (MSSV) <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -1256,12 +1335,12 @@ export default function TracNghiemPortalPage() {
                 </div>
               </div>
 
-              {/* Thông tin tra cứu được */}
+              {/* Thông tin tra cứu được hoặc cho phép nhập tên nếu mã mới */}
               {detectedStudent ? (
                 <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs">
                   <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 font-bold mb-1">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Đã tìm thấy sinh viên:</span>
+                    <span>Đã nhận diện sinh viên:</span>
                   </div>
                   <div className="font-extrabold text-sm text-slate-900 dark:text-white">
                     {detectedStudent.fullName}
@@ -1272,27 +1351,38 @@ export default function TracNghiemPortalPage() {
                   </div>
                 </div>
               ) : inputCode.trim().length >= 2 && !searchingStudent ? (
-                <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>Chưa tìm thấy MSSV này trong danh sách trường. Hãy kiểm tra lại mã chính xác.</span>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1.5">
+                    Họ và tên của bạn (Tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    placeholder="Nhập họ và tên để in lên bài thi..."
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Chưa thấy mã trong dữ liệu trường, bạn vẫn làm bài thi bình thường với họ tên tự chọn này.
+                  </p>
                 </div>
               ) : null}
 
               <div className="flex justify-end gap-3 pt-2">
-                {student && (
-                  <button
-                    onClick={() => setShowStudentModal(false)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition"
-                  >
-                    Đóng
-                  </button>
-                )}
                 <button
-                  onClick={handleConfirmStudent}
-                  disabled={!detectedStudent}
-                  className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition"
+                  type="button"
+                  onClick={() => setShowStudentModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition cursor-pointer"
                 >
-                  Xác nhận &amp; Vào làm bài
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmStudent()}
+                  disabled={!inputCode.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition cursor-pointer"
+                >
+                  Xác nhận &amp; Bắt đầu làm bài
                 </button>
               </div>
             </div>
@@ -1311,7 +1401,7 @@ export default function TracNghiemPortalPage() {
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-sm font-semibold transition"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-sm font-semibold transition cursor-pointer"
               >
                 Hủy
               </button>
@@ -1320,7 +1410,7 @@ export default function TracNghiemPortalPage() {
                   setConfirmModal((prev) => ({ ...prev, open: false }));
                   confirmModal.onConfirm();
                 }}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-md shadow-blue-600/20 transition"
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-md shadow-blue-600/20 transition cursor-pointer"
               >
                 Xác nhận
               </button>

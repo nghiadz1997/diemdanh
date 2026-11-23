@@ -13,6 +13,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const { loading, user } = useAuth();
   const pathname = usePathname();
 
+  // Cho phép mở trang trắc nghiệm tự do mà không bắt buộc đăng nhập
+  if (pathname?.startsWith('/sinh-vien/trac-nghiem')) {
+    return <>{children}</>;
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
