@@ -6,6 +6,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { MODULES, QUESTIONS, QuestionItem } from '@/lib/quiz-data';
 import { QuizVisual } from '@/components/quiz/QuizVisual';
+import { recordQuizHistory, getRecentQuizHistory, QuizHistoryRecord } from '@/services/quizService';
 import { toast } from 'sonner';
 import {
   Clock,
@@ -24,7 +25,10 @@ import {
   Search,
   Check,
   X,
-  RotateCcw
+  RotateCcw,
+  History,
+  Award,
+  Users
 } from 'lucide-react';
 
 interface IdentifiedStudent {
@@ -57,7 +61,7 @@ export default function TracNghiemPortalPage() {
   const [searchingStudent, setSearchingStudent] = useState(false);
   const [detectedStudent, setDetectedStudent] = useState<IdentifiedStudent | null>(null);
   const [showStudentModal, setShowStudentModal] = useState(false);
-  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [pendingAction, setPendingAction] = useState<((s: IdentifiedStudent) => void) | null>(null);
 
   // 2. Trạng thái Quiz & Navigation
   const [view, setView] = useState<'HOME' | 'QUIZ' | 'RESULT' | 'SEARCH'>('HOME');
@@ -76,6 +80,10 @@ export default function TracNghiemPortalPage() {
   const [masteredIds, setMasteredIds] = useState<number[]>([]);
   const [examHistory, setExamHistory] = useState<ExamRecord[]>([]);
 
+  // Lịch sử thời gian thực lưu trên Firestore
+  const [liveHistory, setLiveHistory] = useState<QuizHistoryRecord[]>([]);
+  const [loadingLiveHistory, setLoadingLiveHistory] = useState(false);
+
   // 4. Tìm kiếm
   const [searchQuery, setSearchQuery] = useState('');
   const [searchModule, setSearchModule] = useState(0);
@@ -93,7 +101,20 @@ export default function TracNghiemPortalPage() {
     onConfirm: () => {},
   });
 
-  // Khởi tạo DarkMode & LocalStorage
+  // Tải lịch sử làm bài từ Firestore
+  const fetchLiveHistory = useCallback(async () => {
+    setLoadingLiveHistory(true);
+    try {
+      const records = await getRecentQuizHistory(10);
+      setLiveHistory(records);
+    } catch (e) {
+      console.warn('Không thể tải lịch sử làm bài:', e);
+    } finally {
+      setLoadingLiveHistory(false);
+    }
+  }, []);
+
+  // Khởi tạo DarkMode, LocalStorage & Live History
   useEffect(() => {
     const isDark =
       document.documentElement.classList.contains('dark') ||
@@ -121,7 +142,10 @@ export default function TracNghiemPortalPage() {
         setInputCode(s.studentCode || '');
       }
     } catch (e) {}
-  }, []);
+
+    // Tải lịch sử nộp bài toàn trường
+    fetchLiveHistory();
+  }, [fetchLiveHistory]);
 
   // Tự động nhận diện nếu sinh viên đang đăng nhập sẵn trên máy
   useEffect(() => {
@@ -223,9 +247,19 @@ export default function TracNghiemPortalPage() {
     setShowStudentModal(false);
     toast.success(`Đã nhận diện: ${finalStudent.fullName} (${finalStudent.studentCode})`);
 
+    // Lưu sự kiện nhập mã vào làm bài vào Firestore
+    recordQuizHistory({
+      studentCode: finalStudent.studentCode,
+      studentName: finalStudent.fullName,
+      className: finalStudent.className,
+      action: 'start',
+      mode: 'PORTAL',
+      title: 'Vào cổng ôn thi trắc nghiệm',
+    });
+
     // Thực thi hành động đang chờ nếu có (ví dụ: bấm thi thử)
     if (pendingAction) {
-      pendingAction();
+      pendingAction(finalStudent);
       setPendingAction(null);
     }
 
@@ -304,29 +338,38 @@ export default function TracNghiemPortalPage() {
 
   // Bắt đầu luyện tập
   const startPractice = (moduleId: number = 0, shuffle: boolean = false) => {
-    if (!student) {
+    let currentStu = student;
+    if (!currentStu) {
       if (inputCode.trim()) {
-        const s = handleConfirmStudent();
-        if (!s) return;
+        currentStu = handleConfirmStudent();
+        if (!currentStu) return;
       } else {
-        setPendingAction(() => () => startPractice(moduleId, shuffle));
+        setPendingAction(() => (s: IdentifiedStudent) => {
+          setStudent(s);
+          executeStartPractice(moduleId, shuffle, s);
+        });
         setShowStudentModal(true);
         return;
       }
     }
+    executeStartPractice(moduleId, shuffle, currentStu);
+  };
+
+  const executeStartPractice = (moduleId: number, shuffle: boolean, activeStudent: IdentifiedStudent) => {
     let list = moduleId === 0 ? [...QUESTIONS] : QUESTIONS.filter((q) => q.module === moduleId);
     if (shuffle) {
       list = [...list].sort(() => Math.random() - 0.5);
     }
 
-    setMode('PRACTICE');
-    setTitle(
+    const titleText =
       moduleId === 0
         ? shuffle
           ? 'Ôn tập 300 câu (Xáo trộn ngẫu nhiên)'
           : 'Ôn tập trọn bộ 300 câu CNTT Cơ bản'
-        : `Ôn tập ${MODULES[moduleId - 1].name}: ${MODULES[moduleId - 1].title}`
-    );
+        : `Ôn tập ${MODULES[moduleId - 1].name}: ${MODULES[moduleId - 1].title}`;
+
+    setMode('PRACTICE');
+    setTitle(titleText);
     setQuizList(list);
     setCurrentIndex(0);
     setAnswers({});
@@ -334,27 +377,46 @@ export default function TracNghiemPortalPage() {
     setReviewMode(false);
     setView('QUIZ');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Lưu vào lịch sử Firestore
+    recordQuizHistory({
+      studentCode: activeStudent.studentCode,
+      studentName: activeStudent.fullName,
+      className: activeStudent.className,
+      action: 'start',
+      mode: 'PRACTICE',
+      title: titleText,
+    });
   };
 
   // Bắt đầu ôn các câu làm sai
   const startWrongPractice = () => {
-    if (!student) {
+    let currentStu = student;
+    if (!currentStu) {
       if (inputCode.trim()) {
-        const s = handleConfirmStudent();
-        if (!s) return;
+        currentStu = handleConfirmStudent();
+        if (!currentStu) return;
       } else {
-        setPendingAction(() => () => startWrongPractice());
+        setPendingAction(() => (s: IdentifiedStudent) => {
+          setStudent(s);
+          executeStartWrongPractice(s);
+        });
         setShowStudentModal(true);
         return;
       }
     }
+    executeStartWrongPractice(currentStu);
+  };
+
+  const executeStartWrongPractice = (activeStudent: IdentifiedStudent) => {
     const list = QUESTIONS.filter((q) => wrongIds.includes(q.id));
     if (list.length === 0) {
       toast.info('Bạn chưa có câu nào làm sai. Hãy bắt đầu luyện tập hoặc thi thử trước nhé!');
       return;
     }
+    const titleText = `Ôn lại ${list.length} câu đã làm sai`;
     setMode('WRONG');
-    setTitle(`Ôn lại ${list.length} câu đã làm sai`);
+    setTitle(titleText);
     setQuizList(list);
     setCurrentIndex(0);
     setAnswers({});
@@ -362,20 +424,37 @@ export default function TracNghiemPortalPage() {
     setReviewMode(false);
     setView('QUIZ');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    recordQuizHistory({
+      studentCode: activeStudent.studentCode,
+      studentName: activeStudent.fullName,
+      className: activeStudent.className,
+      action: 'start',
+      mode: 'WRONG',
+      title: titleText,
+    });
   };
 
   // Bắt đầu thi thử chuẩn (30 câu - 30 phút, 5 câu mỗi Module)
   const startExam = () => {
-    if (!student) {
+    let currentStu = student;
+    if (!currentStu) {
       if (inputCode.trim()) {
-        const s = handleConfirmStudent();
-        if (!s) return;
+        currentStu = handleConfirmStudent();
+        if (!currentStu) return;
       } else {
-        setPendingAction(() => () => startExam());
+        setPendingAction(() => (s: IdentifiedStudent) => {
+          setStudent(s);
+          executeStartExam(s);
+        });
         setShowStudentModal(true);
         return;
       }
     }
+    executeStartExam(currentStu);
+  };
+
+  const executeStartExam = (activeStudent: IdentifiedStudent) => {
     let examList: QuestionItem[] = [];
     for (let m = 1; m <= 6; m++) {
       const pool = QUESTIONS.filter((q) => q.module === m).sort(() => Math.random() - 0.5);
@@ -383,8 +462,9 @@ export default function TracNghiemPortalPage() {
     }
     examList.sort(() => Math.random() - 0.5);
 
+    const titleText = 'Thi thử chuẩn ĐH Bách Khoa (30 câu - 30 phút)';
     setMode('EXAM');
-    setTitle('Thi thử chuẩn ĐH Bách Khoa (30 câu - 30 phút)');
+    setTitle(titleText);
     setQuizList(examList);
     setCurrentIndex(0);
     setAnswers({});
@@ -393,6 +473,16 @@ export default function TracNghiemPortalPage() {
     setTimeLeft(1800);
     setView('QUIZ');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Lưu vào lịch sử Firestore
+    recordQuizHistory({
+      studentCode: activeStudent.studentCode,
+      studentName: activeStudent.fullName,
+      className: activeStudent.className,
+      action: 'start',
+      mode: 'EXAM',
+      title: titleText,
+    });
   };
 
   // Chọn đáp án
@@ -457,6 +547,8 @@ export default function TracNghiemPortalPage() {
     });
 
     const score10 = Number(((correctCount / quizList.length) * 10).toFixed(2));
+    const passed = score10 >= 5;
+
     const newRecord: ExamRecord = {
       date: new Date().toLocaleString('vi-VN'),
       studentCode: student?.studentCode || 'N/A',
@@ -464,7 +556,7 @@ export default function TracNghiemPortalPage() {
       correct: correctCount,
       total: quizList.length,
       score: score10,
-      passed: score10 >= 5,
+      passed,
     };
 
     const newHistory = [newRecord, ...examHistory].slice(0, 10);
@@ -472,6 +564,22 @@ export default function TracNghiemPortalPage() {
     setMasteredIds(newMastered);
     setWrongIds(newWrong);
     saveStatsToStorage(newWrong, newMastered, newHistory);
+
+    // LƯU LỊCH SỬ NỘP BÀI VÀO FIRESTORE (HỆ THỐNG GHI NHẬN VÀ LƯU VĨNH VIỄN)
+    recordQuizHistory({
+      studentCode: student?.studentCode || 'N/A',
+      studentName: student?.fullName || 'Sinh viên',
+      className: student?.className,
+      action: 'submit',
+      mode: 'EXAM',
+      title: title || 'Thi thử chuẩn ĐH Bách Khoa (30 câu)',
+      score: score10,
+      correct: correctCount,
+      total: quizList.length,
+      passed,
+    }).then(() => {
+      fetchLiveHistory();
+    });
 
     setView('RESULT');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -484,10 +592,14 @@ export default function TracNghiemPortalPage() {
         open: true,
         title: 'Thoát bài thi thử?',
         message: 'Tiến trình bài thi hiện tại sẽ bị hủy nếu bạn thoát lúc này. Bạn có chắc chắn muốn về Trang chủ?',
-        onConfirm: () => setView('HOME'),
+        onConfirm: () => {
+          setView('HOME');
+          fetchLiveHistory();
+        },
       });
     } else {
       setView('HOME');
+      fetchLiveHistory();
     }
   };
 
@@ -622,7 +734,7 @@ export default function TracNghiemPortalPage() {
                     Cổng Luyện thi Trắc nghiệm CNTT Chuẩn
                   </h2>
                   <p className="text-blue-100 text-sm sm:text-base leading-relaxed">
-                    Đầy đủ 300 câu hỏi chia theo 6 Module chuẩn. Sinh viên chỉ cần nhập Mã số sinh viên (MSSV) là có thể thi thử và ôn tập ngay lập tức mà không cần đăng nhập.
+                    Đầy đủ 300 câu hỏi chia theo 6 Module chuẩn. Sinh viên chỉ cần nhập Mã số sinh viên (MSSV) là có thể thi thử và ôn tập ngay lập tức mà không cần đăng nhập tài khoản.
                   </p>
                 </div>
 
@@ -733,7 +845,7 @@ export default function TracNghiemPortalPage() {
                 </div>
                 <button
                   onClick={handleChangeStudent}
-                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 transition"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 transition cursor-pointer"
                 >
                   Đổi Mã Sinh Viên
                 </button>
@@ -860,57 +972,103 @@ export default function TracNghiemPortalPage() {
               </div>
             </section>
 
-            {/* Lịch sử thi thử */}
-            {examHistory.length > 0 && (
-              <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Lịch sử thi thử gần đây
+            {/* LỊCH SỬ SINH VIÊN LÀM BÀI TRÊN TOÀN TRƯỜNG (LƯU TRÊN FIRESTORE) */}
+            <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3.5">
+                <div className="flex items-center gap-2">
+                  <History className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <h3 className="font-bold text-sm uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Lịch sử sinh viên vào làm bài gần đây (Lưu trên hệ thống)
                   </h3>
-                  <button onClick={clearProgress} className="text-xs text-red-500 hover:underline font-semibold cursor-pointer">
-                    Xóa dữ liệu tiến độ
-                  </button>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-slate-400 border-b border-slate-200 dark:border-slate-800">
-                      <tr>
-                        <th className="py-2">Thời gian</th>
-                        <th className="py-2">Thí sinh (MSSV)</th>
-                        <th className="py-2">Số câu đúng</th>
-                        <th className="py-2">Điểm (thang 10)</th>
-                        <th className="py-2">Kết quả</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {examHistory.map((h, idx) => (
-                        <tr key={idx}>
-                          <td className="py-2.5 text-slate-500 dark:text-slate-400 text-xs">{h.date}</td>
-                          <td className="py-2.5 text-xs font-medium">
-                            {h.studentName} <span className="text-slate-400 font-mono">({h.studentCode})</span>
+                <button
+                  onClick={fetchLiveHistory}
+                  disabled={loadingLiveHistory}
+                  className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline font-semibold cursor-pointer"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${loadingLiveHistory ? 'animate-spin' : ''}`} />
+                  <span>Cập nhật</span>
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                    <tr>
+                      <th className="py-2">Thời gian</th>
+                      <th className="py-2">Mã SV</th>
+                      <th className="py-2">Họ và tên</th>
+                      <th className="py-2">Nội dung</th>
+                      <th className="py-2">Trạng thái</th>
+                      <th className="py-2 text-center">Điểm số</th>
+                      <th className="py-2 text-center">Kết quả</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {liveHistory.length > 0 ? (
+                      liveHistory.map((h, i) => (
+                        <tr key={h.id || i}>
+                          <td className="py-2.5 font-mono text-slate-400">{h.timeStr}</td>
+                          <td className="py-2.5 font-mono font-bold text-blue-600 dark:text-blue-400">
+                            {h.studentCode}
                           </td>
-                          <td className="py-2.5 font-semibold">
-                            {h.correct}/{h.total}
+                          <td className="py-2.5 font-bold text-slate-800 dark:text-slate-200">
+                            {h.studentName}
+                            {h.className && <span className="font-normal text-slate-400 ml-1">({h.className})</span>}
                           </td>
-                          <td className="py-2.5 font-bold text-blue-600 dark:text-blue-400">{h.score}</td>
+                          <td className="py-2.5 font-medium text-slate-600 dark:text-slate-400">
+                            {h.title}
+                          </td>
                           <td className="py-2.5">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                                h.passed
-                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
-                                  : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
-                              }`}
-                            >
-                              {h.passed ? 'ĐẠT' : 'CHƯA ĐẠT'}
-                            </span>
+                            {h.action === 'submit' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
+                                <Check className="w-3 h-3" />
+                                <span>Đã nộp bài</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px]">
+                                <Clock className="w-3 h-3" />
+                                <span>Vào làm bài</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-center font-bold">
+                            {h.score !== undefined ? (
+                              <span className="text-slate-900 dark:text-white font-black">
+                                {h.score}<span className="text-[10px] text-slate-400 font-normal">/10</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-center">
+                            {h.passed !== undefined ? (
+                              <span
+                                className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                  h.passed
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                    : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+                                }`}
+                              >
+                                {h.passed ? 'ĐẠT' : 'CHƯA ĐẠT'}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-400">
+                          {loadingLiveHistory ? 'Đang tải lịch sử...' : 'Chưa có lượt làm bài nào được ghi nhận'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         )}
 
@@ -1190,7 +1348,10 @@ export default function TracNghiemPortalPage() {
                         Thi đề mới
                       </button>
                       <button
-                        onClick={() => setView('HOME')}
+                        onClick={() => {
+                          setView('HOME');
+                          fetchLiveHistory();
+                        }}
                         className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-bold text-sm transition cursor-pointer"
                       >
                         Về Trang chủ
@@ -1248,7 +1409,7 @@ export default function TracNghiemPortalPage() {
                       </span>
                       <span className="text-xs text-slate-400">Module {item.module}</span>
                     </div>
-                    <p className="font-bold text-sm sm:text-base mb-3">{item.text}</p>
+                    <p className="font-bold text-sm sm:text-base mb-3">${item.text}</p>
                     {item.visual && (
                       <div className="mb-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 overflow-x-auto">
                         <QuizVisual visualKey={item.visual} />
