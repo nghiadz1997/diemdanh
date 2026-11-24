@@ -160,6 +160,26 @@ export default function TracNghiemPortalPage() {
     }
   }, [profile]);
 
+  // Tự động ghi nhận log khi sinh viên đã nhận diện mã vào cổng (trong phiên hiện tại)
+  useEffect(() => {
+    if (!student?.studentCode) return;
+    const sessionKey = `quiz_visit_${student.studentCode}`;
+    if (typeof window !== 'undefined' && !sessionStorage.getItem(sessionKey)) {
+      sessionStorage.setItem(sessionKey, '1');
+      recordQuizHistory({
+        studentCode: student.studentCode,
+        studentName: student.fullName,
+        classId: student.classId,
+        className: student.className,
+        action: 'start',
+        mode: 'PORTAL',
+        title: 'Truy cập cổng ôn thi trắc nghiệm',
+      }).then(() => {
+        fetchLiveHistory();
+      });
+    }
+  }, [student, fetchLiveHistory]);
+
   // Lưu thống kê vào localStorage khi có cập nhật
   const saveStatsToStorage = useCallback(
     (wIds: number[], mIds: number[], eHist: ExamRecord[]) => {

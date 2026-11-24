@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { getAllQuizHistory, QuizHistoryRecord } from '@/services/quizService';
+import { getAllQuizHistory, deleteQuizHistory, QuizHistoryRecord } from '@/services/quizService';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, deleteDoc, query, where } from 'firebase/firestore';
 import { ClassItem } from '@/types';
@@ -197,12 +197,16 @@ export default function AdminQuizHistoryPage() {
   }, []);
 
   // Xóa log trắc nghiệm
-  const handleDeleteLog = async (id: string, name: string) => {
+  const handleDeleteLog = async (id: string, name: string, collectionName: 'quizHistory' | 'auditLogs' = 'quizHistory') => {
     if (!confirm(`Bạn có chắc muốn xóa bản ghi nhật ký của "${name}"?`)) return;
     try {
-      await deleteDoc(doc(db, 'quizHistory', id));
-      setHistory((prev) => prev.filter((item) => item.id !== id));
-      toast.success('Đã xóa bản ghi thành công');
+      const ok = await deleteQuizHistory(id, collectionName);
+      if (ok) {
+        setHistory((prev) => prev.filter((item) => item.id !== id));
+        toast.success('Đã xóa bản ghi thành công');
+      } else {
+        toast.error('Lỗi khi xóa bản ghi');
+      }
     } catch (err) {
       toast.error('Lỗi khi xóa bản ghi');
     }
@@ -697,7 +701,7 @@ export default function AdminQuizHistoryPage() {
                       <td className="py-3 px-4 text-right">
                         {row.id && (
                           <button
-                            onClick={() => handleDeleteLog(row.id!, row.studentName)}
+                            onClick={() => handleDeleteLog(row.id!, row.studentName, row._collection)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
                             title="Xóa bản ghi này"
                           >
